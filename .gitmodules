@@ -1,0 +1,3 @@
+[submodule "Assignment 1/lib/ds-test"]
+	path = Assignment 1/lib/ds-test
+	url = https://github.com/dapphub/ds-test
