@@ -9,6 +9,15 @@ contract SimpleRegistry {
     error NameAlreadyClaimed();
     error NotTheOwner();
 
+    /// @notice Event emitted if the register changes.
+    /// @param name The name in the register that got a different value.
+    /// @param owner The new owner of the name if the name was claimed, or the
+    ///     address `0x0` to indicate that the name was released.
+    event RegisterChanged(
+        string indexed name,
+        address indexed owner
+    );
+
     /// @notice This is where the owner of an entry is stored.
     ///
     ///     The mapping of an address to a name in the registry is one-to-many,
@@ -27,6 +36,8 @@ contract SimpleRegistry {
         if (owners[name] == address(0)) {
             // Otherwise, claim the name.
             owners[name] = msg.sender;
+            // Emit event
+            emit RegisterChanged(name, msg.sender);
         } else {
             // Revert if the name has already been claimed.
             revert NameAlreadyClaimed();
@@ -44,6 +55,8 @@ contract SimpleRegistry {
             // If the caller is also the owner, return the name by deleting the
             // owner from the mapping.
             delete owners[name];
+            // Emit the event with the zero address.
+            emit RegisterChanged(name, address(0));
         } else {
             // Otherwise, revert with an error.
             revert NotTheOwner();
