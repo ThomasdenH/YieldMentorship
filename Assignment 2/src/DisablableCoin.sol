@@ -7,7 +7,6 @@ import "yield-utils-v2/token/ERC20.sol";
 /// @notice DisablableCoin is a coin of which transfers can be disabled.
 /// @dev The functionality is accomplished by overriding the transfer methods.
 contract DisablableCoin is ERC20Mock {
-
     /// @notice This boolean indicates whether transfers are currently
     ///     disabled.
     bool public transfersDisabled = false;
@@ -23,7 +22,11 @@ contract DisablableCoin is ERC20Mock {
     ///     `super`. Fortunately here it is pretty much a wrapper for
     ///     `_transfer`.
     /// @return success Whether the transfer was successful.
-    function transfer(address recipient, uint256 amount) override external returns (bool) {
+    function transfer(address recipient, uint256 amount)
+        external
+        override
+        returns (bool)
+    {
         if (transfersDisabled) {
             return false;
         } else {
@@ -31,10 +34,10 @@ contract DisablableCoin is ERC20Mock {
             return _transfer(msg.sender, recipient, amount);
         }
     }
-    
+
     /// @notice Transfer `amount` from `sender` to `recipient`. The allowance
     ///     should be high enough.
-    ///     
+    ///
     ///     If transfers are disabled, this always returns `false` without any
     ///     other effects. Otherwise, the behaviour is identical to that of
     ///     `ERC20Mock`.
@@ -45,7 +48,11 @@ contract DisablableCoin is ERC20Mock {
     ///     method on `ERC20Mock`. Unfortunately a `super` call is not possible
     ///     as the function is marked `external`.
     /// @return success Whether the transfer was successful.
-    function transferFrom(address sender, address recipient, uint256 amount) override external returns (bool) {
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external override returns (bool) {
         if (transfersDisabled) {
             return false;
         } else {
@@ -61,5 +68,5 @@ contract DisablableCoin is ERC20Mock {
     ///     checked before each transfer.
     function setTransfersDisabled(bool disabled) external {
         transfersDisabled = disabled;
-    } 
+    }
 }

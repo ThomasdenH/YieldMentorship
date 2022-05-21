@@ -82,7 +82,10 @@ contract MintedTokenStateTest is MintedTokenState, Test {
 
         // And finally, check balances.
         assertEq(vault.depositOf(address(this)), amountToDeposit);
-        assertEq(token.balanceOf(address(this)), tokensMinted - amountToDeposit);
+        assertEq(
+            token.balanceOf(address(this)),
+            tokensMinted - amountToDeposit
+        );
     }
 }
 
@@ -93,7 +96,7 @@ contract DepositedTokenStateTest is DepositedTokenState, Test {
         // We expect a withdrawal event.
         vm.expectEmit(true, true, true, true);
         emit Withdrawal(address(this), tokensMinted);
-        
+
         // Withdraw.
         vault.withdraw(tokensMinted);
 
@@ -115,7 +118,10 @@ contract DepositedTokenStateTest is DepositedTokenState, Test {
         vault.withdraw(amountToWithdraw);
 
         // Check balances. `tokensMinted` is the size of the initial deposit.
-        assertEq(vault.depositOf(address(this)), tokensMinted - amountToWithdraw);
+        assertEq(
+            vault.depositOf(address(this)),
+            tokensMinted - amountToWithdraw
+        );
         assertEq(token.balanceOf(address(this)), amountToWithdraw);
     }
 
@@ -126,7 +132,11 @@ contract DepositedTokenStateTest is DepositedTokenState, Test {
 
         // Expect a revert containing the address and amount.
         vm.expectRevert(
-            abi.encodeWithSelector(Vault.WithdrawalFailed.selector, address(this), amount)
+            abi.encodeWithSelector(
+                Vault.WithdrawalFailed.selector,
+                address(this),
+                amount
+            )
         );
 
         // Try to withdraw!

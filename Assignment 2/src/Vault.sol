@@ -13,7 +13,7 @@ import "yield-utils-v2/token/IERC20.sol";
 ///     was used to initialize the `Vault`.
 contract Vault {
     /// @notice The token that is stored in the vault.
-    IERC20 immutable public token;
+    IERC20 public immutable token;
 
     /// @notice This event is emitted when a successful deposit is made. It
     ///     contains the account that made the deposit and the amount that was
@@ -75,7 +75,7 @@ contract Vault {
 
     /// @notice Withdraw tokens from the vault and transfer them back to the
     ///     calling address.
-    ///     
+    ///
     ///     This function will fail with `WithdrawalFailed` if the amount to be
     ///     withdrawn is more than the balance of the address. It will also
     ///     fail if the `transfer` function returns `false`.

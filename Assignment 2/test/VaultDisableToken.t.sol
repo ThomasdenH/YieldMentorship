@@ -42,7 +42,11 @@ contract ZeroStateTest is ZeroState, Test {
 
         // And expect a failure on revert.
         vm.expectRevert(
-            abi.encodeWithSelector(Vault.DepositFailed.selector, address(this), amount)
+            abi.encodeWithSelector(
+                Vault.DepositFailed.selector,
+                address(this),
+                amount
+            )
         );
 
         vault.deposit(amount);
@@ -73,7 +77,11 @@ contract ZeroStateTest is ZeroState, Test {
 
         // Expect an error when withdrawing.
         vm.expectRevert(
-            abi.encodeWithSelector(Vault.WithdrawalFailed.selector, address(this), amount)
+            abi.encodeWithSelector(
+                Vault.WithdrawalFailed.selector,
+                address(this),
+                amount
+            )
         );
         vault.withdraw(amount);
     }
