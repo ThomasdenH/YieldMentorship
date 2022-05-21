@@ -8,7 +8,7 @@ import "yield-utils-v2/token/IERC20.sol";
 
 /// @notice In the `ZeroState`, the vault has been setup, `mintedAmount` of
 ///     tokens have been minted and transfers are still enabled.
-abstract contract ZeroState {
+abstract contract ZeroState is Test {
     Vault vault;
     DisablableCoin token;
 
@@ -17,17 +17,22 @@ abstract contract ZeroState {
 
     uint256 constant mintedAmount = 1_000_000_000_000_000_000;
 
+    address constant user = address(101);
+
     function setUp() public virtual {
         token = new DisablableCoin();
         vault = new Vault(token);
-        token.mint(address(this), mintedAmount);
+
+        vm.label(user, "user");
+
+        token.mint(user, mintedAmount);
     }
 }
 
 /// @notice Do some tests for the behaviour when transfers fail, without
 ///     reverting. Normally a revert happens when the balance or allowance is
 ///     too low, which means that the `DepositFailed` errors are seldom thrown.
-contract ZeroStateTest is ZeroState, Test {
+contract ZeroStateTest is ZeroState {
     /// @notice Test the behaviour when a token could not be transferred for
     ///     deposits.
     /// @param amount How many tokens to deposit.
@@ -38,21 +43,20 @@ contract ZeroStateTest is ZeroState, Test {
         token.setTransfersDisabled(true);
 
         // Do approve
+        vm.startPrank(user);
         token.approve(address(vault), amount);
 
         // And expect a failure on revert.
         vm.expectRevert(
-            abi.encodeWithSelector(
-                Vault.DepositFailed.selector,
-                address(this),
-                amount
-            )
+            abi.encodeWithSelector(DepositFailed.selector, user, amount)
         );
 
         vault.deposit(amount);
 
-        assertEq(vault.depositOf(address(this)), 0);
-        assertEq(token.balanceOf(address(this)), mintedAmount);
+        vm.stopPrank();
+
+        assertEq(vault.depositOf(user), 0);
+        assertEq(token.balanceOf(user), mintedAmount);
     }
 
     /// @notice Test the behavior when a token could not be transferred for
@@ -68,21 +72,23 @@ contract ZeroStateTest is ZeroState, Test {
         // Assume a valid amount to deposit.
         vm.assume(amount <= mintedAmount);
 
+        vm.startPrank(user);
+
         // Approve and deposit.
         token.approve(address(vault), amount);
         vault.deposit(amount);
+
+        vm.stopPrank();
 
         // Now disable transfers.
         token.setTransfersDisabled(true);
 
         // Expect an error when withdrawing.
         vm.expectRevert(
-            abi.encodeWithSelector(
-                Vault.WithdrawalFailed.selector,
-                address(this),
-                amount
-            )
+            abi.encodeWithSelector(WithdrawalFailed.selector, user, amount)
         );
+
+        vm.prank(user);
         vault.withdraw(amount);
     }
 }

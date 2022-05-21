@@ -3,6 +3,20 @@ pragma solidity ^0.8.13;
 
 import "yield-utils-v2/token/IERC20.sol";
 
+/// @notice Deposits made using `deposit` can be reverted with this error
+///     if the transfer failed.
+/// @dev This error is thrown if `transferFrom` returns `false`. Instead of
+///     returning false however, it is possible that the `IERC20` reverts,
+///     for example when attempting to transfer more than the allowance.
+///     So: not all failed deposits will throw this error.
+error DepositFailed(address account, uint256 amount);
+
+/// @notice Withdrawals made using `withdraw` can be reverted with this
+///     error if the amount is too low or if the transfer fails for
+///     whatever reason. Like with deposits, it is possible that transfers
+///     revert before this error can be thrown. See also `DepositFailed`.
+error WithdrawalFailed(address account, uint256 amount);
+
 /// @title A vault that can store tokens.
 /// @notice This vault allows users to deposit and withdraw tokens.
 /// @author Thomas den Hollander
@@ -25,19 +39,6 @@ contract Vault {
     ///     withdrawal and the second argument is the amount that was
     ///     withdrawn.
     event Withdrawal(address indexed account, uint256 withdrawn);
-
-    /// @notice Deposits made using `deposit` can be reverted with this error
-    ///     if the transfer failed.
-    /// @dev This error is thrown if `transferFrom` returns `false`. Instead of
-    ///     returning false however, it is possible that the `IERC20` reverts,
-    ///     for example when attempting to transfer more than the allowance.
-    ///     So: not all failed deposits will throw this error.
-    error DepositFailed(address account, uint256 amount);
-    /// @notice Withdrawals made using `withdraw` can be reverted with this
-    ///     error if the amount is too low or if the transfer fails for
-    ///     whatever reason. Like with deposits, it is possible that transfers
-    ///     revert before this error can be thrown. See also `DepositFailed`.
-    error WithdrawalFailed(address account, uint256 amount);
 
     /// @notice The balance, the size of the deposit for an address.
     mapping(address => uint256) public depositOf;
@@ -85,8 +86,9 @@ contract Vault {
     ///     The `else` branches could be combined by adding a `return`, but to
     ///     keep the control flow as obvious as possible they aren't.
     function withdraw(uint256 amount) external {
-        if (depositOf[msg.sender] >= amount) {
-            depositOf[msg.sender] -= amount;
+        uint256 _deposit = depositOf[msg.sender];
+        if (_deposit >= amount) {
+            depositOf[msg.sender] = _deposit - amount;
             if (token.transfer(msg.sender, amount)) {
                 emit Withdrawal(msg.sender, amount);
             } else {
