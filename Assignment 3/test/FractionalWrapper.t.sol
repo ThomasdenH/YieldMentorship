@@ -5,26 +5,69 @@ import "forge-std/Test.sol";
 import "yield-utils-v2/mocks/ERC20Mock.sol";
 import "src/FractionalWrapper.sol";
 
-abstract contract ZeroState {
+/// @dev In this state, the contract has been initialized and user 1 starts
+///     with some tokens.
+abstract contract ZeroState is Test {
     event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
-    
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+
+    event Deposit(
+        address indexed caller,
+        address indexed owner,
+        uint256 assets,
+        uint256 shares
+    );
+    event Withdraw(
+        address indexed caller,
+        address indexed receiver,
+        address indexed owner,
+        uint256 assets,
+        uint256 shares
+    );
+
     ERC20Mock token;
     FractionalWrapper wrapper;
 
     uint256 constant fraction = 7 * (10**26);
 
+    /// @notice The amount of tokens owned by the user.
     uint256 constant tokensMinted = 1_000_000_000_000_000_000;
 
-    function setUp() public {
+    address constant user1 = address(1);
+    address constant user2 = address(2);
+    address constant user3 = address(3);
+
+    function setUp() public virtual {
         token = new ERC20Mock("Token", "TOK");
         wrapper = new FractionalWrapper(token, fraction);
 
-        token.mint(address(this), tokensMinted);
+        // Give user 1 some tokens
+        token.mint(user1, tokensMinted);
     }
 }
 
-contract ZeroStateTest is ZeroState, Test {
+/// @dev In this state, the user has deposited some tokens.
+abstract contract WrappedTokensMintedState is ZeroState {
+    /// @notice The amount of wrapped tokens minted by depositing assets into
+    ///     the contract.
+    uint256 wrapperTokens;
+
+    function setUp() public override {
+        super.setUp();
+
+        // Deposit some tokens
+        vm.startPrank(user1);
+        token.approve(address(wrapper), tokensMinted);
+        wrapperTokens = wrapper.deposit(tokensMinted, user1);
+        vm.stopPrank();
+    }
+}
+
+contract ZeroStateTest is ZeroState {
     function testToken() public {
         assertEq(address(wrapper.token()), address(token));
     }
@@ -58,8 +101,8 @@ contract ZeroStateTest is ZeroState, Test {
         assertEq(wrapper.convertToShares(2), 1);
 
         assertEq(wrapper.convertToShares(9), 6);
-        assertEq(wrapper.convertToShares(9*9), 56);
-        assertEq(wrapper.convertToShares(9*9*9), 510);
+        assertEq(wrapper.convertToShares(9 * 9), 56);
+        assertEq(wrapper.convertToShares(9 * 9 * 9), 510);
     }
 
     function testConvertToAssets() public {
@@ -75,61 +118,186 @@ contract ZeroStateTest is ZeroState, Test {
     }
 
     function testDeposit(address receiver) public {
+        vm.startPrank(user1);
         token.approve(address(wrapper), tokensMinted);
-        wrapper.deposit(tokensMinted, receiver);
 
-        assertEq(wrapper.balanceOf(receiver), wrapper.convertToShares(tokensMinted));
-        assertEq(token.balanceOf(address(this)), 0);
+        vm.expectEmit(true, true, true, true);
+        emit Deposit(
+            user1,
+            receiver,
+            tokensMinted,
+            wrapper.convertToShares(tokensMinted)
+        );
+
+        wrapper.deposit(tokensMinted, receiver);
+        vm.stopPrank();
+
+        assertEq(
+            wrapper.balanceOf(receiver),
+            wrapper.convertToShares(tokensMinted)
+        );
+        assertEq(token.balanceOf(user1), 0);
     }
 
     function testMint(address receiver) public {
+        vm.startPrank(user1);
         token.approve(address(wrapper), tokensMinted);
         uint256 shares = wrapper.convertToShares(tokensMinted);
+
+        vm.expectEmit(true, true, true, true);
+        emit Deposit(user1, receiver, tokensMinted, shares);
+
         wrapper.mint(shares, receiver);
+        vm.stopPrank();
 
         assertEq(wrapper.balanceOf(receiver), shares);
-        assertEq(token.balanceOf(address(this)), 0);
+        assertEq(token.balanceOf(user1), 0);
     }
 
-    function testApproveAndSpendLess(uint256 value, uint256 spend) public {
-        vm.assume(value <= tokensMinted);
-        vm.assume(spend <= value);
-
-        address receiver = address(1);
-        address caller = address(2);
-
+    function testApprove(
+        uint256 value,
+        address from,
+        address to
+    ) public {
         vm.expectEmit(true, true, true, true);
-        emit Approval(address(this), caller, value);
+        emit Approval(from, to, value);
 
-        wrapper.approve(caller, value);
-        assertEq(wrapper.allowance(caller, address(this)), value);
-
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(address(this), receiver, spend);
-        vm.prank(caller);
-        wrapper.transferFrom(address(this), receiver, spend);
-
-        assertEq(wrapper.allowance(caller, address(this)), value - spend);
-        assertEq(wrapper.balanceOf(receiver), spend);
-        assertEq(wrapper.balanceOf(address(this)), value - spend);
+        vm.prank(from);
+        assertEq(wrapper.approve(to, value), true);
+        assertEq(wrapper.allowance(from, to), value);
     }
 
-    
-    function testApproveAndSpendMore(uint256 value, uint256 spend) public {
-        vm.assume(value <= tokensMinted);
-        vm.assume(spend > value);
+    function testMaxDeposit(address account) public {
+        assertEq(wrapper.maxDeposit(account), type(uint256).max);
+    }
 
-        address receiver = address(1);
-        address caller = address(2);
+    /// @dev Just test if this function is equivalent to `convertToShares`.
+    function testPreviewDeposit(uint256 assets) public {
+        vm.assume(assets <= 10**36);
+        assertEq(
+            wrapper.previewDeposit(assets),
+            wrapper.convertToShares(assets)
+        );
+    }
+
+    function testMaxMint(address account) public {
+        assertEq(wrapper.maxDeposit(account), type(uint256).max);
+    }
+
+    /// @dev Just test if this function is equivalent to `convertToAssets`.
+    function testPreviewMint(uint256 shares) public {
+        vm.assume(shares <= 10**36);
+        assertEq(wrapper.previewMint(shares), wrapper.convertToAssets(shares));
+    }
+
+    function testInitialMaxWithdraw(address owner) public {
+        assertEq(wrapper.maxWithdraw(owner), 0);
+    }
+
+    /// @dev Just test if this function is equivalent to `convertToShares`.
+    function testPreviewWithdraw(uint256 assets) public {
+        vm.assume(assets <= 10**36);
+        assertEq(
+            wrapper.previewWithdraw(assets),
+            wrapper.convertToShares(assets)
+        );
+    }
+
+    function testInitialMaxRedeem(address owner) public {
+        assertEq(wrapper.maxRedeem(owner), 0);
+    }
+
+    /// @dev Just test if this function is equivalent to `convertToAssets`.
+    function testPreviewRedeem(uint256 shares) public {
+        vm.assume(shares <= 10**36);
+        assertEq(
+            wrapper.previewRedeem(shares),
+            wrapper.convertToAssets(shares)
+        );
+    }
+}
+
+contract WrappedTokensMintedStateTest is WrappedTokensMintedState {
+    function testTransfer() public {
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(user1, user2, wrapperTokens);
+
+        vm.prank(user1);
+        assertEq(wrapper.transfer(user2, wrapperTokens), true);
+
+        assertEq(wrapper.balanceOf(user1), 0);
+        assertEq(wrapper.balanceOf(user2), wrapperTokens);
+    }
+
+    function testTransferFrom() public {
+        vm.expectEmit(true, true, true, true);
+        emit Approval(user1, user2, wrapperTokens);
+
+        // Approval by user 1
+        vm.prank(user1);
+        assertEq(wrapper.approve(user2, wrapperTokens), true);
 
         vm.expectEmit(true, true, true, true);
-        emit Approval(address(this), caller, value);
+        emit Transfer(user1, user3, wrapperTokens);
 
-        wrapper.approve(caller, value);
-        assertEq(wrapper.allowance(caller, address(this)), value);
+        // Spending by user 2
+        vm.prank(user2);
+        assertEq(wrapper.transferFrom(user1, user3, wrapperTokens), true);
+
+        assertEq(wrapper.allowance(user1, user2), 0);
+        assertEq(wrapper.balanceOf(user1), 0);
+        assertEq(wrapper.balanceOf(user2), 0);
+        assertEq(wrapper.balanceOf(user3), wrapperTokens);
+    }
+
+    function testMaxWithdraw() public {
+        assertEq(wrapper.maxWithdraw(user1), tokensMinted);
+    }
+
+    function testMaxRedeem() public {
+        assertEq(wrapper.maxRedeem(user1), wrapperTokens);
+    }
+
+    function testWithdraw() public {
+        address receiver = user2;
+        address caller = user3;
+
+        vm.prank(user1);
+        wrapper.approve(caller, wrapperTokens);
+
+        vm.expectEmit(true, true, true, true);
+        emit Withdraw(caller, receiver, user1, tokensMinted, wrapperTokens);
 
         vm.prank(caller);
-        vm.expectRevert(FractionalWrapper.TransferFailed.selector);
-        wrapper.transferFrom(address(this), receiver, spend);
+        assertEq(
+            wrapper.withdraw(tokensMinted, receiver, user1),
+            wrapperTokens
+        );
+
+        assertEq(wrapper.allowance(user1, caller), 0);
+        assertEq(wrapper.balanceOf(caller), 0);
+        assertEq(wrapper.balanceOf(receiver), 0);
+        assertEq(wrapper.balanceOf(user1), 0);
+        assertEq(token.balanceOf(receiver), tokensMinted);
+    }
+
+    function testRedeem() public {
+        address receiver = user2;
+        address caller = user3;
+
+        vm.prank(user1);
+        wrapper.approve(caller, wrapperTokens);
+
+        vm.expectEmit(true, true, true, true);
+        emit Withdraw(caller, receiver, user1, tokensMinted, wrapperTokens);
+
+        vm.prank(caller);
+        assertEq(wrapper.redeem(wrapperTokens, receiver, user1), tokensMinted);
+
+        assertEq(wrapper.allowance(user1, caller), 0);
+        assertEq(wrapper.balanceOf(caller), 0);
+        assertEq(wrapper.balanceOf(receiver), 0);
+        assertEq(wrapper.balanceOf(user1), 0);
+        assertEq(token.balanceOf(receiver), tokensMinted);
     }
 }
