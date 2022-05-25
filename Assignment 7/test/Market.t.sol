@@ -29,16 +29,16 @@ abstract contract ZeroState is Test {
 }
 
 abstract contract DepositedState is ZeroState {
+    uint256 depositedX = 10**15;
+    uint256 depositedY = (2 * depositedX) / 3;
+
     function setUp() public override {
         super.setUp();
 
-        uint256 inputX = 10**15;
-        uint256 inputY = (2 * inputX) / 3;
-
         vm.startPrank(user1);
-        tokenX.approve(address(market), inputX);
-        tokenY.approve(address(market), inputY);
-        market.initialize(inputX, inputY);
+        tokenX.approve(address(market), depositedX);
+        tokenY.approve(address(market), depositedY);
+        market.initialize(depositedX, depositedY);
         vm.stopPrank();
     }
 }
@@ -192,5 +192,38 @@ contract DepositedStateTest is DepositedState {
         market.approve(spender, value);
 
         assertEq(market.allowance(owner, spender), value);
+    }
+
+    function testApprove1() public {
+        address owner = user1;
+        address spender = user2;
+        uint256 value = 10**50;
+        vm.prank(owner);
+        market.approve(spender, value);
+
+        assertEq(market.allowance(owner, spender), value);
+    }
+
+    function testMint() public {
+        uint256 x = 150_000_000;
+        uint256 y = 100_000_000;
+
+        vm.startPrank(user1);
+        tokenX.approve(address(market), x);
+        tokenY.approve(address(market), y);
+        uint256 z = market.mint(x, y);
+        vm.stopPrank();
+
+        // The tokens should have been subtracted
+        assertEq(tokenX.balanceOf(user1), tokenBalanceX - depositedX - x);
+        assertEq(tokenY.balanceOf(user1), tokenBalanceY - depositedY - y + 1);
+
+        // The liquidity tokens issued should be proportional to the tokens
+        // supplied.
+        uint256 x_1 = tokenX.balanceOf(address(market));
+        uint256 y_1 = tokenX.balanceOf(address(market));
+        uint256 z_1 = market.totalSupply();
+        assertEq(z / z_1, x / x_1);
+        assertEq(z / z_1, y / y_1);
     }
 }
