@@ -226,4 +226,13 @@ contract DepositedStateTest is DepositedState {
         assertEq(z / z_1, x / x_1);
         assertEq(z / z_1, y / y_1);
     }
+
+    function testBurn() public {
+        uint256 _balance = market.balanceOf(user1);
+        vm.prank(user1);
+        (uint256 x, uint256 y) = market.burn(_balance);
+
+        assertEq(x, depositedX);
+        assertEq(y, depositedY);
+    }
 }

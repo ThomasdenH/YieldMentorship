@@ -179,9 +179,6 @@ contract Market is IERC20Metadata {
     function mint(uint256 x, uint256 y) external returns (uint256 z) {
         require(totalSupply > 0);
 
-        uint256 x_0 = token_x.balanceOf(address(this));
-        uint256 y_0 = token_y.balanceOf(address(this));
-
         // The user should supply x and y in the same ratio as is currenly in
         // the contract. That means
         //      x / y = x_0 / y_0
@@ -198,6 +195,9 @@ contract Market is IERC20Metadata {
         //      z = z_0 * (x / x_0) = z_0 * (y / y_0)
         //          = x_0 * y
         //          = y_0 * x
+
+        uint256 x_0 = token_x.balanceOf(address(this));
+        uint256 y_0 = token_y.balanceOf(address(this));
 
         uint256 z_x = x * y_0;
         uint256 z_y = y * x_0;
@@ -248,11 +248,16 @@ contract Market is IERC20Metadata {
         require(_balance > 0);
 
         if (_balance >= z) {
-            x = (token_x.balanceOf(msg.sender) * z) / totalSupply;
-            y = (token_y.balanceOf(msg.sender) * z) / totalSupply;
+            uint256 _totalSupply = totalSupply;
+            x = (token_x.balanceOf(address(this)) * z) / _totalSupply;
+            y = (token_y.balanceOf(address(this)) * z) / _totalSupply;
 
-            balanceOf[msg.sender] = _balance - z;
-            totalSupply -= z;
+            unchecked {
+                // Unchecked as we have checked the balance, and the total
+                // supply is equal to the sum of balances.
+                balanceOf[msg.sender] = _balance - z;
+                totalSupply = _totalSupply - z;
+            }
 
             if (
                 token_x.transfer(msg.sender, x) &&
