@@ -16,6 +16,7 @@ abstract contract ZeroState is Test {
 
     address user1 = address(1);
     address user2 = address(2);
+    address user3 = address(3);
 
     function setUp() public virtual {
         tokenX = new ERC20Mock("Token Y", "X");
@@ -105,6 +106,35 @@ contract DepositedStateTest is DepositedState {
             tokenX.balanceOf(address(market)) *
                 tokenY.balanceOf(address(market)),
             z + 666666666000000
+        );
+        assertEq(tokenX.balanceOf(user2), 0);
+        assertEq(tokenY.balanceOf(user2), y);
+        assertEq(y_real, y);
+    }
+
+    function testSellX2() public {
+        // The current supply is x ~ y : 1 ~ 2/3.
+
+        uint256 x = 1234;
+        uint256 y = 822;
+
+        tokenX.mint(user2, x);
+
+        uint256 z = market.totalSupply();
+
+        vm.startPrank(user2);
+        tokenX.approve(address(market), x);
+        uint256 y_real = market.sell_x(x);
+        vm.stopPrank();
+
+        // A small increase of
+        //      z_0 = 666666666666666000000000000000
+        // to
+        //      z_1 = 666666666666666666666666000000
+        assertEq(
+            tokenX.balanceOf(address(market)) *
+                tokenY.balanceOf(address(market)),
+            z + 666666665651496
         );
         assertEq(tokenX.balanceOf(user2), 0);
         assertEq(tokenY.balanceOf(user2), y);
@@ -234,5 +264,58 @@ contract DepositedStateTest is DepositedState {
 
         assertEq(x, depositedX);
         assertEq(y, depositedY);
+    }
+
+    function testTransferFrom(address spender, address receiver, uint256 value) public {
+        vm.assume(receiver != user1);
+        uint256 _balance = market.balanceOf(user1);
+        vm.assume(value <= _balance);
+
+        vm.prank(user1);
+        market.approve(spender, value);
+
+        vm.prank(spender);
+        market.transferFrom(user1, receiver, value);
+
+        assertEq(market.balanceOf(receiver), value);
+        assertEq(market.balanceOf(user1), _balance - value);
+    }
+
+    function testTransferFrom1() public {
+        address spender = user2;
+        address receiver = user3;
+        uint256 value = 1_000;
+
+        uint256 _balance = market.balanceOf(user1);
+
+        vm.prank(user1);
+        market.approve(spender, value);
+
+        vm.prank(spender);
+        market.transferFrom(user1, receiver, value);
+
+        assertEq(market.balanceOf(receiver), value);
+        assertEq(market.balanceOf(user1), _balance - value);
+    }
+
+    function testTransferInsufficientBalance() public {
+        vm.expectRevert(InsufficientBalanceOrAllowance.selector);
+
+        vm.prank(user1);
+        market.transfer(user2, 10**30);
+    }
+
+    function testTransferFromInsufficientBalance() public {
+        address spender = user2;
+        address receiver = user3;
+        uint256 value = 10**32;
+
+        vm.prank(user1);
+        market.approve(spender, value);
+
+        vm.expectRevert(InsufficientBalanceOrAllowance.selector);
+
+        vm.prank(spender);
+        market.transferFrom(user1, receiver, value);
     }
 }

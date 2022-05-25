@@ -4,16 +4,20 @@ pragma solidity ^0.8.13;
 import "yield-utils-v2/token/IERC20.sol";
 import "yield-utils-v2/token/IERC20Metadata.sol";
 
-error InitializationFailed();
-error MintingFailed();
-error BurnFailed();
-error SellFailed();
-error TransferFailed();
+/// @notice The operation failed because a transfer with inner tokens could not
+///     be completed.
+error TokenTransferFailed();
+/// @notice The operation failed because the caller did not have sufficient
+///     balance in terms of liquidity tokens, or allowance.
+error InsufficientBalanceOrAllowance();
 
 /// @title An Automated Market Maker contract.
 /// @notice Provides capability to supply liquidity and to exchange tokens.
 ///     A nice property of AMM's is that liquidity never runs out by selling
 ///     tokens; the price goes to infinity as tokens of one type run out.
+/// @dev Any function of this contract rounds in favour of the contract. It may
+///     be possible to profit from this contract, for example by holding
+///     liquidity tokens while these rounding errors accumulate.
 contract Market is IERC20Metadata {
     event Initialized(address indexed to, uint256 amount1, uint256 amount2);
     event Minted(
@@ -101,7 +105,7 @@ contract Market is IERC20Metadata {
         ) {
             emit Initialized(msg.sender, x, y);
         } else {
-            revert InitializationFailed();
+            revert TokenTransferFailed();
         }
     }
 
@@ -117,17 +121,17 @@ contract Market is IERC20Metadata {
     ///     transaction did not revert, this always returns true.
     function transfer(address recipient, uint256 amount) external override returns (bool) {
         uint256 _senderBalance = balanceOf[msg.sender];
-        if (_senderBalance >= amount) {
-            unchecked {
-                // Does not underflow as _senderBalance >= amount.
-                balanceOf[msg.sender] = _senderBalance - amount;
-            }
-            balanceOf[recipient] += amount;
-            emit Transfer(msg.sender, recipient, amount);
-            return true;
-        } else {
-            revert TransferFailed();
+        if (_senderBalance < amount) {
+            revert InsufficientBalanceOrAllowance();
         }
+
+        unchecked {
+            // Does not underflow as _senderBalance >= amount.
+            balanceOf[msg.sender] = _senderBalance - amount;
+        }
+        balanceOf[recipient] += amount;
+        emit Transfer(msg.sender, recipient, amount);
+        return true;
     }
 
     /// @notice Transfer tokens from one account to another account. Requires
@@ -144,15 +148,17 @@ contract Market is IERC20Metadata {
     function transferFrom(address sender, address recipient, uint256 amount) external override returns (bool success) {
         uint256 _senderBalance = balanceOf[sender];
         uint256 _allowance = allowance[sender][msg.sender];
-        if (_senderBalance >= amount && _allowance >= amount) {
+        if (_senderBalance < amount || _allowance < amount) {
+            revert InsufficientBalanceOrAllowance();
+        }
+        unchecked {
+            // Does not overflow due to the above checks
             allowance[sender][msg.sender] = _allowance - amount;
             balanceOf[sender] = _senderBalance - amount;
-            balanceOf[recipient] += amount;
-            emit Transfer(sender, recipient, amount);
-            return true;
-        } else {
-            revert TransferFailed();
         }
+        balanceOf[recipient] += amount;
+        emit Transfer(sender, recipient, amount);
+        return true;
     }
 
     /// @notice Allow an address to spend `value` tokens. This sets the
@@ -176,6 +182,9 @@ contract Market is IERC20Metadata {
     /// @param x The amount of tokenX to supply.
     /// @param y The amount of tokenY to supply.
     /// @return z The amount of liquidity tokens returned.
+    /// @dev The amount of subtracted x and y tokens is computed by setting the
+    ///     values of both equal to that with lesser value. The amount of
+    ///     returned `z` tokens is rounded down from the correct value.
     function mint(uint256 x, uint256 y) external returns (uint256 z) {
         require(totalSupply > 0);
 
@@ -231,7 +240,7 @@ contract Market is IERC20Metadata {
         ) {
             emit Minted(msg.sender, x, y, z);
         } else {
-            revert MintingFailed();
+            revert TokenTransferFailed();
         }
     }
 
@@ -240,6 +249,8 @@ contract Market is IERC20Metadata {
     /// @param z The amount of liquidity tokens to burn.
     /// @return x The amount of tokenX that was sent to the account.
     /// @return y The amount of tokenY that was send to the account.
+    /// @dev The tokens X and Y that are returned to the owner are rounded down
+    ///     from the "real" value.
     function burn(uint256 z) external returns (uint256 x, uint256 y) {
         uint256 _balance = balanceOf[msg.sender];
 
@@ -247,28 +258,31 @@ contract Market is IERC20Metadata {
         // to save gas, check the balance which has already been loaded.
         require(_balance > 0);
 
-        if (_balance >= z) {
-            uint256 _totalSupply = totalSupply;
-            x = (token_x.balanceOf(address(this)) * z) / _totalSupply;
-            y = (token_y.balanceOf(address(this)) * z) / _totalSupply;
+        if (_balance < z) {
+            revert InsufficientBalanceOrAllowance();
+        }
 
-            unchecked {
-                // Unchecked as we have checked the balance, and the total
-                // supply is equal to the sum of balances.
-                balanceOf[msg.sender] = _balance - z;
-                totalSupply = _totalSupply - z;
-            }
+        uint256 _totalSupply = totalSupply;
 
-            if (
-                token_x.transfer(msg.sender, x) &&
-                token_y.transfer(msg.sender, y)
-            ) {
-                emit Burned(msg.sender, x, y, z);
-            } else {
-                revert BurnFailed();
-            }
+        // Update the balance, totalSupply
+        unchecked {
+            // Unchecked as we have checked the balance, and the total
+            // supply is equal to the sum of balances.
+            balanceOf[msg.sender] = _balance - z;
+            totalSupply = _totalSupply - z;
+        }
+
+        // Compute how many tokens should be returned.
+        x = (token_x.balanceOf(address(this)) * z) / _totalSupply;
+        y = (token_y.balanceOf(address(this)) * z) / _totalSupply;
+
+        if (
+            token_x.transfer(msg.sender, x) &&
+            token_y.transfer(msg.sender, y)
+        ) {
+            emit Burned(msg.sender, x, y, z);
         } else {
-            revert BurnFailed();
+            revert TokenTransferFailed();
         }
     }
 
@@ -278,6 +292,8 @@ contract Market is IERC20Metadata {
     ///     approval for this contract to send itself tokenX.
     /// @param x The amount of tokenX to sell.
     /// @return y The amount of tokenY that has been transferred.
+    /// @dev Due to rounding, the amount of returned `y` tokens can only be
+    ///     smaller than the "real" value.
     function sell_x(uint256 x) external returns (uint256 y) {
         require(totalSupply > 0);
 
@@ -297,7 +313,7 @@ contract Market is IERC20Metadata {
         ) {
             emit SoldX(msg.sender, x, y);
         } else {
-            revert SellFailed();
+            revert TokenTransferFailed();
         }
     }
 
@@ -307,6 +323,8 @@ contract Market is IERC20Metadata {
     ///     approval for this contract to send itself tokenY.
     /// @param y The amount of tokenY to sell.
     /// @return x The amount of tokenX that has been transferred.
+    /// @dev Due to rounding, the amount of returned `x` tokens can only be
+    ///     smaller than the "real" value.
     function sell_y(uint256 y) external returns (uint256 x) {
         require(totalSupply > 0);
 
@@ -319,7 +337,7 @@ contract Market is IERC20Metadata {
         ) {
             emit SoldY(msg.sender, x, y);
         } else {
-            revert SellFailed();
+            revert TokenTransferFailed();
         }
     }
 }
