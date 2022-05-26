@@ -1,36 +1,38 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
+import "yield-utils-v2/access/Ownable.sol";
+import "yield-utils-v2/token/ERC20.sol";
+import "yield-utils-v2/token/TransferHelper.sol";
 import "src/EIP4626.sol";
 
 error TransferFailed();
 error DepositFailed();
 error WithdrawalFailed();
 
+using TransferHelper for IERC20;
+
 /// @title A fractional wrapper.
 /// @notice Wraps a token in a new token with a different denomination.
 ///     Implements ERC20 as well as the vault standard EIP4626.
 /// @author Thomas den Hollander
-/// @dev The fraction is set in the constructor. Apart from the `convert*` 
+/// @dev The fraction is set in the constructor. Apart from the `convert*`
 ///     functions that do the fractional computation, the vault behaviour is
-///     pretty standard. 
-contract FractionalWrapper is EIP4626 {
+///     pretty standard.
+contract FractionalWrapper is
+    EIP4626,
+    ERC20("FractionalWrapper", "FWRAP", 18),
+    Ownable
+{
     /// @notice The asset that is used as underlying in this contract.
-    IERC20 immutable public token;
+    IERC20 public immutable token;
 
     /// @notice The asset that is used as underlying in this contract.
     /// @dev This returns the same as `token`, except for the type. This
     ///     function exists purely to comply with `EIP4626`.
-    function asset() external override view returns (address) {
+    function asset() external view override returns (address) {
         return address(token);
     }
-
-    /// @notice The name of the wrapper token.
-    string public constant override name = "FractionalWrapper";
-    /// @notice The symbol of the wrapper token.
-    string public constant override symbol = "FWRAP";
-    /// @notice The number of decimals of the wrapper token.
-    uint8 public constant override decimals = 18;
 
     /// @notice The fraction at which the wrapped tokens are minted for the
     ///     underlying.
@@ -44,32 +46,25 @@ contract FractionalWrapper is EIP4626 {
     ///     wrapping a token with 0 decimals into a wrapper with 18 decimals
     ///     will effectively correspond to a fraction of
     ///     `1 / 1e-18 * fractionDenominator`.
-    uint256 public immutable fraction;
+    uint256 public fraction;
+
     /// @notice The unit corresponding to a fraction of 1 in terms of the
     ///     smallest token unit. See also `fraction`.
     uint256 constant fractionDenominator = 10**27;
-
-    /// @notice The total amount of wrapped tokens in existence.
-    uint256 public override totalSupply = 0;
 
     /// @notice The total amount of assets managed by the vault.
     /// @dev This simply calls the balance of this address. This means that not
     ///     all assets may be redeemable by an account: we could have received
     ///     a generous gift. These would still add up to the total.
     /// @return totalManagedAssets The assets managed by this contract.
-    function totalAssets() external override view returns (uint256 totalManagedAssets) {
+    function totalAssets()
+        external
+        view
+        override
+        returns (uint256 totalManagedAssets)
+    {
         return token.balanceOf(address(this));
     }
-
-    /// @notice The current allowance by the owner to spend by the spender.
-    ///     Access as follows:
-    ///     - owner: The owner of the tokens. Note: The allowance may be higher
-    ///         than their current balance.
-    ///     - spender: The spender of the tokens.
-    mapping(address => mapping(address => uint256)) public override allowance;
-
-    /// @notice The balance of addresses in terms of wrapper tokens.
-    mapping(address => uint256) public override balanceOf;
 
     /// @notice Create a new wrapper.
     /// @param _token The token to use as collateral.
@@ -81,83 +76,48 @@ contract FractionalWrapper is EIP4626 {
         fraction = _fraction;
     }
 
-    /// @notice Transfer tokens to another account.
-    ///
-    ///     Fails with `TransferFailed` if the balance of the caller is not
-    ///     high enough.
-    /// @param recipient The tokens' new owner.
-    /// @param amount The amount of tokens to transfer. This is denominated in
-    ///     shares, not collateral!
-    /// @return successful whether the transfer was succesful. If the
-    ///     transaction did not revert, this always returns true.
-    function transfer(address recipient, uint256 amount) external override returns (bool) {
-        uint256 _senderBalance = balanceOf[msg.sender];
-        if (_senderBalance >= amount) {
-            balanceOf[msg.sender] = _senderBalance - amount;
-            balanceOf[recipient] += amount;
-            emit Transfer(msg.sender, recipient, amount);
-            return true;
-        } else {
-            revert TransferFailed();
-        }
-    }
-
-    /// @notice Transfer tokens from one account to another account. Requires
-    ///     sufficient allowance by the spending party. The amount is
-    ///     subtracted from the allowance.
-    ///     
-    ///     Fails with `TransferFailed` if the balance is not high enough, or
-    ///     if the allowance is not sufficient.
-    /// @param sender The account to take tokens from.
-    /// @param recipient The account to send tokens to.
-    /// @param amount The amount of tokens to send.
-    /// @return success whether the transfer was succesful. If the
-    ///     transaction did not revert, this always returns true.
-    function transferFrom(address sender, address recipient, uint256 amount) external override returns (bool success) {
-        uint256 _senderBalance = balanceOf[sender];
-        uint256 _allowance = allowance[sender][msg.sender];
-        if (_senderBalance >= amount && _allowance >= amount) {
-            allowance[sender][msg.sender] = _allowance - amount;
-            balanceOf[sender] = _senderBalance - amount;
-            balanceOf[recipient] += amount;
-            emit Transfer(sender, recipient, amount);
-            return true;
-        } else {
-            revert TransferFailed();
-        }
-    }
-
-    /// @notice Allow an address to spend `value` tokens. This sets the
-    ///     allowance to the new value. Be mindful of ordering attacks when
-    ///     using this function: https://github.com/yieldprotocol/yield-utils-v2/blob/main/contracts/token/IERC20.sol#L42
-    /// @param spender The spender of the tokens owned by the caller.
-    /// @param value The total value that may be spent, possibly across several
-    ///     transactions.
-    /// @return successful whether the approval was successful. In our case
-    ///     this is always true.
-    function approve(address spender, uint256 value) external override returns (bool) {
-        allowance[msg.sender][spender] = value;
-        emit Approval(msg.sender, spender, value);
-        return true;
+    /// @notice Update the fraction at which shares can be minted/burned. This
+    ///     function can only be called by the current owner of the contract.
+    /// @param _fraction The new fraction at which shares can be minted and
+    ///     burned.
+    /// @dev See the caveats on `fraction` for how to use the `_fraction`
+    ///     parameter.
+    function setFraction(uint256 _fraction) external onlyOwner {
+        fraction = _fraction;
     }
 
     /// @notice Compute how many shares have the value of a given amount of assets.
     /// @param assets The amount of assets to do the calculation with.
     /// @return shares The amount of shares, denoted a precision of `decimals`.
-    function convertToShares(uint256 assets) public override view returns (uint256 shares) {
+    function convertToShares(uint256 assets)
+        public
+        view
+        override
+        returns (uint256 shares)
+    {
         return (assets * fraction) / fractionDenominator;
     }
 
     /// @notice Compute how many assets have the value of a given amount of shares.
     /// @param shares The shares to do the computation on.
     /// @return assets How many assets are worth the provided `shares`.
-    function convertToAssets(uint256 shares) public override view returns (uint256 assets) {
+    function convertToAssets(uint256 shares)
+        public
+        view
+        override
+        returns (uint256 assets)
+    {
         return (shares * fractionDenominator) / fraction;
     }
 
     /// @notice The maximal deposit.
     /// @dev There is no maximal deposit.
-    function maxDeposit(address) external override pure returns (uint256 maxAssets) {
+    function maxDeposit(address)
+        external
+        pure
+        override
+        returns (uint256 maxAssets)
+    {
         return type(uint256).max;
     }
 
@@ -165,7 +125,12 @@ contract FractionalWrapper is EIP4626 {
     ///     contract.
     /// @param assets The amount of assets to be deposited.
     /// @dev For this contract, this is is the same as `convertToShares`.
-    function previewDeposit(uint256 assets) external override view returns(uint256 shares) {
+    function previewDeposit(uint256 assets)
+        external
+        view
+        override
+        returns (uint256 shares)
+    {
         return convertToShares(assets);
     }
 
@@ -173,20 +138,30 @@ contract FractionalWrapper is EIP4626 {
     /// @param assets The amount of assets to deposit. This contract should be
     ///     allowed to send itself at least this many of the underlying.
     /// @param receiver The recipient of the shares.
-    function deposit(uint256 assets, address receiver) external override returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver)
+        external
+        override
+        returns (uint256 shares)
+    {
         shares = convertToShares(assets);
-        balanceOf[receiver] += shares;
-        totalSupply += shares;
-        if (token.transferFrom(msg.sender, address(this), assets)) {
-            emit Deposit(msg.sender, receiver, assets, shares);
-        } else {
-            revert DepositFailed();
-        }
+
+        // Mint share tokens to the receiver
+        _mint(receiver, shares);
+
+        // Transfer the underlying to the contract
+        token.safeTransferFrom(msg.sender, address(this), assets);
+
+        emit Deposit(msg.sender, receiver, assets, shares);
     }
 
     /// @notice The maximal amount that can be minted.
     /// @dev There is no maximal mint amount.
-    function maxMint(address) external override pure returns (uint256 maxShares) {
+    function maxMint(address)
+        external
+        pure
+        override
+        returns (uint256 maxShares)
+    {
         return type(uint256).max;
     }
 
@@ -195,7 +170,12 @@ contract FractionalWrapper is EIP4626 {
     ///     `convertToAssets`.
     /// @param shares The shares to use for the mint preview.
     /// @return assets The assets that were required as underlying.
-    function previewMint(uint256 shares) external override view returns (uint256 assets) {
+    function previewMint(uint256 shares)
+        external
+        view
+        override
+        returns (uint256 assets)
+    {
         return convertToAssets(shares);
     }
 
@@ -203,23 +183,33 @@ contract FractionalWrapper is EIP4626 {
     /// @param shares The shares to mint.
     /// @param receiver The owner of the new shares.
     /// @return assets The assets that were required as underlying.
-    function mint(uint256 shares, address receiver) external override returns (uint256 assets) {
+    function mint(uint256 shares, address receiver)
+        external
+        override
+        returns (uint256 assets)
+    {
         assets = convertToAssets(shares);
-        balanceOf[receiver] += shares;
-        totalSupply += shares;
-        if (token.transferFrom(msg.sender, address(this), assets)) {
-            emit Deposit(msg.sender, receiver, assets, shares);
-        } else {
-            revert DepositFailed();
-        }
+
+        // Mint share tokens to the receiver
+        _mint(receiver, shares);
+
+        // Transfer the underlying to the contract
+        token.safeTransferFrom(msg.sender, address(this), assets);
+
+        emit Deposit(msg.sender, receiver, assets, shares);
     }
 
     /// @notice The maximal amount that can be withdrawn.
     /// @param owner The withdrawer-to-be.
     /// @return maxAssets The maximum amount of assets.
     /// @dev The maximum is determined solely by the balance of the user.
-    function maxWithdraw(address owner) external override view returns (uint256 maxAssets) {
-        return convertToAssets(balanceOf[owner]);
+    function maxWithdraw(address owner)
+        external
+        view
+        override
+        returns (uint256 maxAssets)
+    {
+        return convertToAssets(_balanceOf[owner]);
     }
 
     /// @notice Preview how many shares would be minted with the given assets.
@@ -227,78 +217,60 @@ contract FractionalWrapper is EIP4626 {
     ///     `convertToShares`.
     /// @param assets How many assets would be put into the wrapper.
     /// @return shares The shares that would be minted.
-    function previewWithdraw(uint256 assets) external override view returns (uint256 shares) {
+    function previewWithdraw(uint256 assets)
+        external
+        view
+        override
+        returns (uint256 shares)
+    {
         return convertToShares(assets);
-    }
-
-    /// @notice Internal withdraw function. Used by `withdraw` and `redeem`
-    ///     since they are identical except for the computation of
-    ///     assets/shares.
-    /// @param assets The amount of assets to withdraw.
-    /// @param shares Shares corresponding to the assets.
-    /// @param receiver The receiver of the underlying.
-    /// @param owner The owner of the wrapper tokens.
-    /// @dev This function checks the following:
-    ///     - The caller should be the owner or have sufficient allowance.
-    ///         The allowance should be subtracted.
-    ///     - The balance of the owner in shares should be sufficient.
-    ///     - The token transfer should be successful.
-    ///     In all other cases the withdrawal should revert.
-    function _withdraw(uint256 assets, uint256 shares, address receiver, address owner) internal {
-        // First check ownership/permission:
-        if (msg.sender != owner) {
-            // Not the owner, try to subtract allowance.
-            uint256 _allowance = allowance[owner][msg.sender];
-            if (_allowance >= shares) {
-                allowance[owner][msg.sender] = _allowance - shares;
-            } else {
-                revert WithdrawalFailed();
-            }
-        }
-
-        // At this point the sender is the owner, or the allowance has been
-        // withdrawn.
-
-        // Check the balance
-        uint256 _balance = balanceOf[owner];
-        if (_balance < shares) {
-            revert WithdrawalFailed();
-        }
-
-        // Update the state
-        balanceOf[owner] = _balance - shares;
-        totalSupply -= shares;
-
-        if (token.transfer(receiver, assets)) {
-            emit Withdraw(msg.sender, receiver, owner, assets, shares);
-        } else {
-            revert WithdrawalFailed();
-        }
     }
 
     /// @notice Withdraw assets from the vault. Can be called by the owner or
     ///     by another account that has sufficient allowance from the owner.
-    ///     
+    ///
     ///     Emits the `Withdraw` event.
     /// @param assets The assets that should be withdrawn.
     /// @param receiver The receiver of the assets.
     /// @param owner The current owner of the shares.
     /// @return shares The shares that were burned to return the assets.
-    function withdraw(uint256 assets, address receiver, address owner) external override returns (uint256 shares) {
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        address owner
+    ) external override returns (uint256 shares) {
         shares = convertToShares(assets);
-        _withdraw(assets, shares, receiver, owner);
+        
+        // Confirm the sender is the owner or else decrease the allowance.
+        _decreaseAllowance(owner, shares);
+
+        // Burn shares and transfer tokens
+        _burn(owner, shares);
+        token.safeTransfer(receiver, assets);
+        
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 
     /// @notice The maximal amount that can be redeemed by an account.
     /// @param owner The potential redeemer.
-    function maxRedeem(address owner) external override view returns (uint256 maxShares) {
-        return balanceOf[owner];
+    function maxRedeem(address owner)
+        external
+        view
+        override
+        returns (uint256 maxShares)
+    {
+        return _balanceOf[owner];
     }
 
     /// @notice Preview how many assets would be returned when redeeming shares.
     /// @param shares The amount of shares to be redeemed.
     /// @return assets The assets that would be returned.
-    function previewRedeem(uint256 shares) external override view returns (uint256 assets) {
+    function previewRedeem(uint256 shares)
+        external
+        view
+        override
+        returns (uint256 assets)
+    {
         return convertToAssets(shares);
     }
 
@@ -311,8 +283,20 @@ contract FractionalWrapper is EIP4626 {
     /// @return assets The amount of underlying that was returned.
     /// @dev This function is the same as `withdraw` except that it accepts
     ///     `shares` instead of `assets` to compute the other from.
-    function redeem(uint256 shares, address receiver, address owner) external override returns (uint256 assets) {
+    function redeem(
+        uint256 shares,
+        address receiver,
+        address owner
+    ) external override returns (uint256 assets) {
         assets = convertToAssets(shares);
-        _withdraw(assets, shares, receiver, owner);
+
+        // Confirm the sender is the owner or else decrease the allowance.
+        _decreaseAllowance(owner, shares);
+
+        // Burn shares and transfer tokens
+        _burn(owner, shares);
+        token.safeTransfer(receiver, assets);
+        
+        emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
 }

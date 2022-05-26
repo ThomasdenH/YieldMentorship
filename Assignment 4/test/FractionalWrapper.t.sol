@@ -93,25 +93,43 @@ contract ZeroStateTest is ZeroState {
         assertEq(wrapper.balanceOf(account), 0);
     }
 
+    /// @dev The `convertToShares` function is very simple. Changing this into
+    ///     a fuzz test would basically mean duplicating the entire function.
+    ///     Instead, just test some examples: here we should get
+    ///     `floor(x * 7 / 10)`. That way, we can explicitely see interaction
+    ///     with rounding.
     function testConvertToShares() public {
+        // 100 => 70
         assertEq(wrapper.convertToShares(100), 70);
+        // 19 => 13.3
         assertEq(wrapper.convertToShares(19), 13);
+        // 8 => 5.6
         assertEq(wrapper.convertToShares(8), 5);
+        // 7 => 4.9
         assertEq(wrapper.convertToShares(7), 4);
+        // 2 => 1.4
         assertEq(wrapper.convertToShares(2), 1);
 
+        // 9 => 6.3
         assertEq(wrapper.convertToShares(9), 6);
+        // 81 => 56.7
         assertEq(wrapper.convertToShares(9 * 9), 56);
+        // 729 => 510.3
         assertEq(wrapper.convertToShares(9 * 9 * 9), 510);
     }
 
+    /// @dev Same as `testConvertToShares`. Here we compute
+    ///     `floor(x * 10 / 7)`.
     function testConvertToAssets() public {
+        // 7 => 10
         assertEq(wrapper.convertToAssets(7), 10);
+        // 700 => 1000
         assertEq(wrapper.convertToAssets(700), 1000);
 
-        assertEq(wrapper.convertToAssets(100_000), 142857);
-        assertEq(wrapper.convertToAssets(10_000), 14285);
-        assertEq(wrapper.convertToAssets(1_000), 1428);
+        // 1 / 7 = 0.142857... (repeating)
+        assertEq(wrapper.convertToAssets(100_000), 142_857);
+        assertEq(wrapper.convertToAssets(10_000), 14_285);
+        assertEq(wrapper.convertToAssets(1_000), 1_428);
         assertEq(wrapper.convertToAssets(100), 142);
         assertEq(wrapper.convertToAssets(10), 14);
         assertEq(wrapper.convertToAssets(1), 1);
@@ -299,5 +317,18 @@ contract WrappedTokensMintedStateTest is WrappedTokensMintedState {
         assertEq(wrapper.balanceOf(receiver), 0);
         assertEq(wrapper.balanceOf(user1), 0);
         assertEq(token.balanceOf(receiver), tokensMinted);
+    }
+
+    /// @dev Test adjusting the fraction by multiplying it by 2. That means
+    ///     assets mint twice as many shares so redeeming should give half as
+    ///     many.
+    function testSetFraction() public {
+        wrapper.setFraction(2 * fraction);
+
+        vm.prank(user1);
+        assertEq(wrapper.redeem(wrapperTokens, user1, user1), tokensMinted / 2);
+
+        assertEq(wrapper.balanceOf(user1), 0);
+        assertEq(token.balanceOf(user1), tokensMinted / 2);
     }
 }
