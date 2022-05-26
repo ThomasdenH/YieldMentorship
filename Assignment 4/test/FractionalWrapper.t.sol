@@ -172,19 +172,6 @@ contract ZeroStateTest is ZeroState {
         assertEq(token.balanceOf(user1), 0);
     }
 
-    function testApprove(
-        uint256 value,
-        address from,
-        address to
-    ) public {
-        vm.expectEmit(true, true, true, true);
-        emit Approval(from, to, value);
-
-        vm.prank(from);
-        assertEq(wrapper.approve(to, value), true);
-        assertEq(wrapper.allowance(from, to), value);
-    }
-
     function testMaxDeposit(address account) public {
         assertEq(wrapper.maxDeposit(account), type(uint256).max);
     }
@@ -236,38 +223,6 @@ contract ZeroStateTest is ZeroState {
 }
 
 contract WrappedTokensMintedStateTest is WrappedTokensMintedState {
-    function testTransfer() public {
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(user1, user2, wrapperTokens);
-
-        vm.prank(user1);
-        assertEq(wrapper.transfer(user2, wrapperTokens), true);
-
-        assertEq(wrapper.balanceOf(user1), 0);
-        assertEq(wrapper.balanceOf(user2), wrapperTokens);
-    }
-
-    function testTransferFrom() public {
-        vm.expectEmit(true, true, true, true);
-        emit Approval(user1, user2, wrapperTokens);
-
-        // Approval by user 1
-        vm.prank(user1);
-        assertEq(wrapper.approve(user2, wrapperTokens), true);
-
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(user1, user3, wrapperTokens);
-
-        // Spending by user 2
-        vm.prank(user2);
-        assertEq(wrapper.transferFrom(user1, user3, wrapperTokens), true);
-
-        assertEq(wrapper.allowance(user1, user2), 0);
-        assertEq(wrapper.balanceOf(user1), 0);
-        assertEq(wrapper.balanceOf(user2), 0);
-        assertEq(wrapper.balanceOf(user3), wrapperTokens);
-    }
-
     function testMaxWithdraw() public {
         assertEq(wrapper.maxWithdraw(user1), tokensMinted);
     }
