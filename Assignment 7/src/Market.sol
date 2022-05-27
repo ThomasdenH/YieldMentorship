@@ -172,16 +172,12 @@ contract Market is ERC20("MarketToken", "MART", 18) {
 
         // Here, we need
         //      x_0 * y_0 = (x_0 + x) * (y_0 - y)
-        //      (x_0 * y_0) / (x_0 + x) = y_0 - y
-        //      y = y_0 - (x_0 * y_0) / (x_0 + x)
-        //      y = y_0(x_0 + x - x_0) / (x_0 + x)
-        //      y = y_0 * x / (x_0 + x)
+        //      y = y_0 - x_0 * y_0 / (x_0 + x)
+        //        = y_0 * x / (x_0 + x)
+        //        = z_0 * x / (x_0 (x_0 + x))
 
         uint256 x_0 = token_x.balanceOf(address(this));
         y = _totalSupply * x / (x_0 * (x_0 + x));
-
-        // uint256 x_1 = token_x.balanceOf(address(this)) + x;
-        // y = token_y.balanceOf(address(this)) * x / x_1;
 
         token_x.safeTransferFrom(msg.sender, address(this), x);
         token_y.transfer(msg.sender, y);
