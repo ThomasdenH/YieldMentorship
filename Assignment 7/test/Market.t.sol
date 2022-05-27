@@ -187,53 +187,6 @@ contract DepositedStateTest is DepositedState {
         assertEq(x_real, x);
     }
 
-    function testTransfer(address recipient, uint256 amount) public {
-        uint256 _balance = market.balanceOf(user1);
-        vm.assume(recipient != user1);
-        vm.assume(amount < _balance);
-
-        vm.prank(user1);
-        market.transfer(recipient, amount);
-
-        assertEq(market.balanceOf(user1), _balance - amount);
-        assertEq(market.balanceOf(recipient), amount);
-    }
-
-    function testTransfer1() public {
-        address recipient = user2;
-        uint256 amount = 10**10;
-        uint256 _balance = market.balanceOf(user1);
-        vm.assume(recipient != user1);
-        vm.assume(amount < _balance);
-
-        vm.prank(user1);
-        market.transfer(recipient, amount);
-
-        assertEq(market.balanceOf(user1), _balance - amount);
-        assertEq(market.balanceOf(recipient), amount);
-    }
-
-    function testApprove(
-        address owner,
-        address spender,
-        uint256 value
-    ) public {
-        vm.prank(owner);
-        market.approve(spender, value);
-
-        assertEq(market.allowance(owner, spender), value);
-    }
-
-    function testApprove1() public {
-        address owner = user1;
-        address spender = user2;
-        uint256 value = 10**50;
-        vm.prank(owner);
-        market.approve(spender, value);
-
-        assertEq(market.allowance(owner, spender), value);
-    }
-
     function testMint() public {
         uint256 x = 150_000_000;
         uint256 y = 100_000_000;
@@ -264,58 +217,5 @@ contract DepositedStateTest is DepositedState {
 
         assertEq(x, depositedX);
         assertEq(y, depositedY);
-    }
-
-    function testTransferFrom(address spender, address receiver, uint256 value) public {
-        vm.assume(receiver != user1);
-        uint256 _balance = market.balanceOf(user1);
-        vm.assume(value <= _balance);
-
-        vm.prank(user1);
-        market.approve(spender, value);
-
-        vm.prank(spender);
-        market.transferFrom(user1, receiver, value);
-
-        assertEq(market.balanceOf(receiver), value);
-        assertEq(market.balanceOf(user1), _balance - value);
-    }
-
-    function testTransferFrom1() public {
-        address spender = user2;
-        address receiver = user3;
-        uint256 value = 1_000;
-
-        uint256 _balance = market.balanceOf(user1);
-
-        vm.prank(user1);
-        market.approve(spender, value);
-
-        vm.prank(spender);
-        market.transferFrom(user1, receiver, value);
-
-        assertEq(market.balanceOf(receiver), value);
-        assertEq(market.balanceOf(user1), _balance - value);
-    }
-
-    function testTransferInsufficientBalance() public {
-        vm.expectRevert(InsufficientBalanceOrAllowance.selector);
-
-        vm.prank(user1);
-        market.transfer(user2, 10**30);
-    }
-
-    function testTransferFromInsufficientBalance() public {
-        address spender = user2;
-        address receiver = user3;
-        uint256 value = 10**32;
-
-        vm.prank(user1);
-        market.approve(spender, value);
-
-        vm.expectRevert(InsufficientBalanceOrAllowance.selector);
-
-        vm.prank(spender);
-        market.transferFrom(user1, receiver, value);
     }
 }
