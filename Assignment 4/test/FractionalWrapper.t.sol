@@ -68,12 +68,8 @@ abstract contract WrappedTokensMintedState is ZeroState {
 }
 
 contract ZeroStateTest is ZeroState {
-    function testToken() public {
-        assertEq(address(wrapper.token()), address(token));
-    }
-
     function testAsset() public {
-        assertEq(wrapper.asset(), address(token));
+        assertEq(address(wrapper.asset()), address(token));
     }
 
     function testFraction() public {

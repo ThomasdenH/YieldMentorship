@@ -25,14 +25,7 @@ contract FractionalWrapper is
     Ownable
 {
     /// @notice The asset that is used as underlying in this contract.
-    IERC20 public immutable token;
-
-    /// @notice The asset that is used as underlying in this contract.
-    /// @dev This returns the same as `token`, except for the type. This
-    ///     function exists purely to comply with `EIP4626`.
-    function asset() external view override returns (address) {
-        return address(token);
-    }
+    IERC20 public immutable override asset;
 
     /// @notice The fraction at which the wrapped tokens are minted for the
     ///     underlying.
@@ -63,16 +56,16 @@ contract FractionalWrapper is
         override
         returns (uint256 totalManagedAssets)
     {
-        return token.balanceOf(address(this));
+        return asset.balanceOf(address(this));
     }
 
     /// @notice Create a new wrapper.
-    /// @param _token The token to use as collateral.
+    /// @param _asset The token to use as collateral.
     /// @param _fraction The fraction at which to mint/withdraw the tokens.
     /// @dev See the caveats on `fraction` for how to use the `_fraction`
     ///     parameter.
-    constructor(IERC20 _token, uint256 _fraction) {
-        token = _token;
+    constructor(IERC20 _asset, uint256 _fraction) {
+        asset = _asset;
         fraction = _fraction;
     }
 
@@ -149,7 +142,7 @@ contract FractionalWrapper is
         _mint(receiver, shares);
 
         // Transfer the underlying to the contract
-        token.safeTransferFrom(msg.sender, address(this), assets);
+        asset.safeTransferFrom(msg.sender, address(this), assets);
 
         emit Deposit(msg.sender, receiver, assets, shares);
     }
@@ -194,7 +187,7 @@ contract FractionalWrapper is
         _mint(receiver, shares);
 
         // Transfer the underlying to the contract
-        token.safeTransferFrom(msg.sender, address(this), assets);
+        asset.safeTransferFrom(msg.sender, address(this), assets);
 
         emit Deposit(msg.sender, receiver, assets, shares);
     }
@@ -246,7 +239,7 @@ contract FractionalWrapper is
 
         // Burn shares and transfer tokens
         _burn(owner, shares);
-        token.safeTransfer(receiver, assets);
+        asset.safeTransfer(receiver, assets);
         
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }
@@ -295,7 +288,7 @@ contract FractionalWrapper is
 
         // Burn shares and transfer tokens
         _burn(owner, shares);
-        token.safeTransfer(receiver, assets);
+        asset.safeTransfer(receiver, assets);
         
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
     }

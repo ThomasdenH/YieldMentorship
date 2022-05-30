@@ -2,6 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "yield-utils-v2/token/IERC20Metadata.sol";
+import "yield-utils-v2/token/IERC20.sol";
 
 abstract contract EIP4626 is IERC20Metadata {
     event Deposit(
@@ -18,7 +19,7 @@ abstract contract EIP4626 is IERC20Metadata {
         uint256 shares
     );
 
-    function asset() external view virtual returns (address assetTokenAddress);
+    function asset() external view virtual returns (IERC20 assetTokenAddress);
 
     function totalAssets()
         external
