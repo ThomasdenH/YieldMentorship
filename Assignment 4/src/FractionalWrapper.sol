@@ -82,10 +82,22 @@ contract FractionalWrapper is
     /// @notice Compute how many shares have the value of a given amount of assets.
     /// @param assets The amount of assets to do the calculation with.
     /// @return shares The amount of shares, denoted a precision of `decimals`.
+    /// @dev Wrapper around `_convertToShares`.
     function convertToShares(uint256 assets)
         public
         view
         override
+        returns (uint256 shares)
+    {
+        return _convertToShares(assets);
+    }
+
+    /// @notice Compute how many shares have the value of a given amount of assets.
+    /// @param assets The amount of assets to do the calculation with.
+    /// @return shares The amount of shares, denoted a precision of `decimals`.
+    function _convertToShares(uint256 assets)
+        internal
+        view
         returns (uint256 shares)
     {
         return (assets * fraction) / fractionDenominator;
@@ -94,10 +106,22 @@ contract FractionalWrapper is
     /// @notice Compute how many assets have the value of a given amount of shares.
     /// @param shares The shares to do the computation on.
     /// @return assets How many assets are worth the provided `shares`.
+    /// @dev Wrapper around `_convertToAssets`.
     function convertToAssets(uint256 shares)
         public
         view
         override
+        returns (uint256 assets)
+    {
+        return _convertToAssets(shares);
+    }
+    
+    /// @notice Compute how many assets have the value of a given amount of shares.
+    /// @param shares The shares to do the computation on.
+    /// @return assets How many assets are worth the provided `shares`.
+    function _convertToAssets(uint256 shares)
+        public
+        view
         returns (uint256 assets)
     {
         return (shares * fractionDenominator) / fraction;
@@ -124,7 +148,7 @@ contract FractionalWrapper is
         override
         returns (uint256 shares)
     {
-        return convertToShares(assets);
+        return _convertToShares(assets);
     }
 
     /// @notice Deposit assets into the contract to receive shares in return.
@@ -136,7 +160,7 @@ contract FractionalWrapper is
         override
         returns (uint256 shares)
     {
-        shares = convertToShares(assets);
+        shares = _convertToShares(assets);
 
         // Mint share tokens to the receiver
         _mint(receiver, shares);
@@ -169,7 +193,7 @@ contract FractionalWrapper is
         override
         returns (uint256 assets)
     {
-        return convertToAssets(shares);
+        return _convertToAssets(shares);
     }
 
     /// @notice Mint `shares` number of shares to the `receiver`.
@@ -181,7 +205,7 @@ contract FractionalWrapper is
         override
         returns (uint256 assets)
     {
-        assets = convertToAssets(shares);
+        assets = _convertToAssets(shares);
 
         // Mint share tokens to the receiver
         _mint(receiver, shares);
@@ -202,7 +226,7 @@ contract FractionalWrapper is
         override
         returns (uint256 maxAssets)
     {
-        return convertToAssets(_balanceOf[owner]);
+        return _convertToAssets(_balanceOf[owner]);
     }
 
     /// @notice Preview how many shares would be minted with the given assets.
@@ -216,7 +240,7 @@ contract FractionalWrapper is
         override
         returns (uint256 shares)
     {
-        return convertToShares(assets);
+        return _convertToShares(assets);
     }
 
     /// @notice Withdraw assets from the vault. Can be called by the owner or
@@ -232,7 +256,7 @@ contract FractionalWrapper is
         address receiver,
         address owner
     ) external override returns (uint256 shares) {
-        shares = convertToShares(assets);
+        shares = _convertToShares(assets);
         
         // Confirm the sender is the owner or else decrease the allowance.
         _decreaseAllowance(owner, shares);
@@ -264,7 +288,7 @@ contract FractionalWrapper is
         override
         returns (uint256 assets)
     {
-        return convertToAssets(shares);
+        return _convertToAssets(shares);
     }
 
     /// @notice Redeem shares for assets.
@@ -281,7 +305,7 @@ contract FractionalWrapper is
         address receiver,
         address owner
     ) external override returns (uint256 assets) {
-        assets = convertToAssets(shares);
+        assets = _convertToAssets(shares);
 
         // Confirm the sender is the owner or else decrease the allowance.
         _decreaseAllowance(owner, shares);
