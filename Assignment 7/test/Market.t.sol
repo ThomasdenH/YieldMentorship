@@ -49,6 +49,7 @@ contract ContractTest is ZeroState {
         uint256 inputX = 10**15;
         uint256 inputY = 2 * inputX;
 
+        // Initialize by adding liquidity with the two tokens.
         vm.startPrank(user1);
         tokenX.approve(address(market), inputX);
         tokenY.approve(address(market), inputY);
@@ -63,7 +64,8 @@ contract ContractTest is ZeroState {
 
 contract DepositedStateTest is DepositedState {
     /// @dev Test whether selling doesn't give the user too much. Due to
-    ///     rounding errors exact comparison is not really possible.
+    ///     rounding errors exact comparison is not really possible while
+    ///     using fuzzing.
     function testSellX(uint256 x) public {
         vm.assume(x <= 10**40);
 
@@ -73,9 +75,11 @@ contract DepositedStateTest is DepositedState {
 
         vm.startPrank(user2);
         tokenX.approve(address(market), x);
-        market.sell_x(x);
+        market.sellX(x);
         vm.stopPrank();
 
+        // Test that the market liquidity is enough to cover all liquidity
+        // tokens.
         assert(
             tokenX.balanceOf(address(market)) *
                 tokenY.balanceOf(address(market)) >=
@@ -83,9 +87,11 @@ contract DepositedStateTest is DepositedState {
         );
     }
 
+    /// @dev Here, test selling in a specific case. Here we know the rounding
+    ///     to test.
     function testSellX1() public {
         // The current supply is x ~ y : 1 ~ 2/3.
-
+        // Therefore, selling `x` tokenX yields `y` tokenY:
         uint256 x = 1000;
         uint256 y = 666;
 
@@ -95,10 +101,13 @@ contract DepositedStateTest is DepositedState {
 
         vm.startPrank(user2);
         tokenX.approve(address(market), x);
-        uint256 y_real = market.sell_x(x);
+        uint256 yReal = market.sellX(x);
         vm.stopPrank();
 
-        // A small increase of
+        // Test liquidity. The product of the balances should be at least as
+        // much as the liquidity tokens.
+        //
+        // We have small increase of
         //      z_0 = 666666666666666000000000000000
         // to
         //      z_1 = 666666666666666666666666000000
@@ -107,9 +116,12 @@ contract DepositedStateTest is DepositedState {
                 tokenY.balanceOf(address(market)),
             z + 666666666000000
         );
+
+        // Test that the tokens were transferred correctly.
         assertEq(tokenX.balanceOf(user2), 0);
         assertEq(tokenY.balanceOf(user2), y);
-        assertEq(y_real, y);
+        // Test the return parameter.
+        assertEq(yReal, y);
     }
 
     function testSellX2() public {
@@ -124,13 +136,13 @@ contract DepositedStateTest is DepositedState {
 
         vm.startPrank(user2);
         tokenX.approve(address(market), x);
-        uint256 y_real = market.sell_x(x);
+        uint256 yReal = market.sellX(x);
         vm.stopPrank();
 
         // A small increase of
         //      z_0 = 666666666666666000000000000000
         // to
-        //      z_1 = 666666666666666666666666000000
+        //      z_1 = 666666666666666666666665651496
         assertEq(
             tokenX.balanceOf(address(market)) *
                 tokenY.balanceOf(address(market)),
@@ -138,7 +150,7 @@ contract DepositedStateTest is DepositedState {
         );
         assertEq(tokenX.balanceOf(user2), 0);
         assertEq(tokenY.balanceOf(user2), y);
-        assertEq(y_real, y);
+        assertEq(yReal, y);
     }
 
     /// @dev Test whether selling doesn't give the user too much. Due to
@@ -152,7 +164,7 @@ contract DepositedStateTest is DepositedState {
 
         vm.startPrank(user2);
         tokenY.approve(address(market), y);
-        market.sell_y(y);
+        market.sellY(y);
         vm.stopPrank();
 
         assert(
@@ -174,7 +186,7 @@ contract DepositedStateTest is DepositedState {
 
         vm.startPrank(user2);
         tokenY.approve(address(market), y);
-        uint256 x_real = market.sell_y(y);
+        uint256 xReal = market.sellY(y);
         vm.stopPrank();
 
         assertEq(
@@ -184,9 +196,12 @@ contract DepositedStateTest is DepositedState {
         );
         assertEq(tokenX.balanceOf(user2), x);
         assertEq(tokenY.balanceOf(user2), 0);
-        assertEq(x_real, x);
+        assertEq(xReal, x);
     }
 
+    /// @dev Test whether minting more liquidity tokens takes the correct
+    ///     amount of tokens and gives liquidity tokens in the right
+    ///     proportion.
     function testMint() public {
         uint256 x = 150_000_000;
         uint256 y = 100_000_000;
@@ -203,11 +218,11 @@ contract DepositedStateTest is DepositedState {
 
         // The liquidity tokens issued should be proportional to the tokens
         // supplied.
-        uint256 x_1 = tokenX.balanceOf(address(market));
-        uint256 y_1 = tokenX.balanceOf(address(market));
-        uint256 z_1 = market.totalSupply();
-        assertEq(z / z_1, x / x_1);
-        assertEq(z / z_1, y / y_1);
+        uint256 x1 = tokenX.balanceOf(address(market));
+        uint256 y1 = tokenX.balanceOf(address(market));
+        uint256 z1 = market.totalSupply();
+        assertEq(z / z1, x / x1);
+        assertEq(z / z1, y / y1);
     }
 
     function testBurn() public {
