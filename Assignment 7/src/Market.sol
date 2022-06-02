@@ -5,12 +5,9 @@ import "yield-utils-v2/token/ERC20.sol";
 import "yield-utils-v2/token/TransferHelper.sol";
 import "yield-utils-v2/token/IERC20.sol";
 
-using TransferHelper for IERC20;
-
 /// @notice Reverted with this error if the contract should be initialized but
 ///     wasn't.
 error Uninitialized();
-
 
 /// @title An Automated Market Maker contract.
 /// @notice Provides capability to supply liquidity and to exchange tokens.
@@ -27,6 +24,8 @@ error Uninitialized();
 ///     k0 and k1, respectively. k1 >= k0 after exchanges and should only
 ///     increase due to rounding.
 contract Market is ERC20("MarketToken", "MART", 18) {
+    using TransferHelper for IERC20;
+
     /// @notice Emitted when the market gets initialized. This can happen
     ///     multiple times if the contracts liquidity gets emptied entirely!
     event Initialized(address indexed to, uint256 xAmount, uint256 yAmount);
@@ -93,10 +92,11 @@ contract Market is ERC20("MarketToken", "MART", 18) {
         z = x * y;
 
         _mint(msg.sender, z);
-        tokenX.safeTransferFrom(msg.sender, address(this), x);
-        tokenY.safeTransferFrom(msg.sender, address(this), y);
 
         emit Initialized(msg.sender, x, y);
+
+        tokenX.safeTransferFrom(msg.sender, address(this), x);
+        tokenY.safeTransferFrom(msg.sender, address(this), y);
     }
 
     /// @notice Mint liquidity tokens in proportion to the current price in the
@@ -155,10 +155,11 @@ contract Market is ERC20("MarketToken", "MART", 18) {
         }
 
         _mint(msg.sender, z);
-        tokenX.safeTransferFrom(msg.sender, address(this), x);
-        tokenY.safeTransferFrom(msg.sender, address(this), y);
 
         emit Minted(msg.sender, x, y, z);
+
+        tokenX.safeTransferFrom(msg.sender, address(this), x);
+        tokenY.safeTransferFrom(msg.sender, address(this), y);
     }
 
     /// @notice Burn liquidity tokens in exchange for tokenX and tokenY in
@@ -189,10 +190,11 @@ contract Market is ERC20("MarketToken", "MART", 18) {
         y = (tokenY.balanceOf(address(this)) * z) / tSup;
 
         _burn(msg.sender, z);
-        tokenX.safeTransfer(msg.sender, x);
-        tokenY.safeTransfer(msg.sender, y);
 
         emit Burned(msg.sender, x, y, z);
+
+        tokenX.safeTransfer(msg.sender, x);
+        tokenY.safeTransfer(msg.sender, y);
     }
 
     /// @notice Sell tokenX in exchange for tokenY. The price in the contract
@@ -232,10 +234,10 @@ contract Market is ERC20("MarketToken", "MART", 18) {
 
         y = (y0 * x) / (x0 + x);
 
-        tokenX.safeTransferFrom(msg.sender, address(this), x);
-        tokenY.transfer(msg.sender, y);
-
         emit SoldX(msg.sender, x, y);
+
+        tokenX.safeTransferFrom(msg.sender, address(this), x);
+        tokenY.safeTransfer(msg.sender, y);
     }
 
     /// @notice Sell tokenY in exchange for tokenX. The price in the contract
@@ -252,9 +254,9 @@ contract Market is ERC20("MarketToken", "MART", 18) {
 
         x = x0 * y / (y0 + y);
 
-        tokenY.safeTransferFrom(msg.sender, address(this), y);
-        tokenX.transfer(msg.sender, x);
-
         emit SoldY(msg.sender, x, y);
+
+        tokenY.safeTransferFrom(msg.sender, address(this), y);
+        tokenX.safeTransfer(msg.sender, x);
     }
 }
