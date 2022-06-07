@@ -10,6 +10,12 @@
 [submodule "Assignment 2/lib/forge-std"]
 	path = Assignment 2/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "Assignment 7/lib/forge-std"]
+	path = Assignment 7/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "Assignment 7/lib/yield-utils-v2"]
+	path = Assignment 7/lib/yield-utils-v2
+	url = https://github.com/yieldprotocol/yield-utils-v2
 [submodule "Assignment 4/lib/forge-std"]
 	path = Assignment 4/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std

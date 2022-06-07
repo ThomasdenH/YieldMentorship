@@ -25,4 +25,6 @@ jobs:
       - name: Run tests for Assignment 4
         working-directory: "./Assignment 4"
         run: forge test
-  
+      - name: Run tests for Assignment 7
+        working-directory: "./Assignment 7"
+        run: forge test
