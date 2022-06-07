@@ -1,0 +1,21 @@
+.sell-popup {
+    position: absolute;
+    background-color: white;
+    border: 1px solid black;
+    padding: 16px;
+    top: 128px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.close {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 8px;
+    right: 8px;
+    border: none;
+    background: none;
+    cursor: pointer;
+}

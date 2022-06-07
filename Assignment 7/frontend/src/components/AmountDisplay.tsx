@@ -9,14 +9,14 @@ interface Props {
   inverted?: boolean;
 }
 
-export function AmountDisplay({
+export const AmountDisplay = ({
   height,
   onMouseMove,
   onMouseOut,
   change,
   inverted,
   onClick,
-}: Props): JSX.Element {
+}: Props): JSX.Element => {
   let changeElement = <></>;
   if (change !== undefined) {
     if (inverted === true) change = -change;

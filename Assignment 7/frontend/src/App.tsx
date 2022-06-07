@@ -1,4 +1,4 @@
-import React, { createContext, useState } from "react";
+import { createContext, useState } from "react";
 import "./App.css";
 import { ethers, Signer } from "ethers";
 import { Provider } from "@wagmi/core";
@@ -14,7 +14,7 @@ export const ProviderAndSigner = createContext<IProviderAndSigner | undefined>(
   undefined
 );
 
-function App() {
+const App = () => {
   const [signer, setSigner] = useState<Signer | undefined>(undefined);
 
   if (window.ethereum === undefined)

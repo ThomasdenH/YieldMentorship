@@ -1,11 +1,11 @@
 import { BigNumber } from "ethers";
 import { useContext, useState } from "react";
 import { ProviderAndSigner } from "../App";
+import { formatUnits } from "../util";
 import { AmountDisplay } from "./AmountDisplay";
 import { ContractsContext } from "./Contracts";
 import "./Panel.css";
-
-const GAS_ESTIMATE_FOR_SELL: number = 4000000;
+import { Direction, SellPopup } from "./SellPopup";
 
 interface IBalances {
   balanceWeth: BigNumber;
@@ -14,7 +14,7 @@ interface IBalances {
   marketBalanceDai: BigNumber;
 }
 
-export function Panel() {
+export const Panel = () => {
   const providerAndSigner = useContext(ProviderAndSigner);
   const contracts = useContext(ContractsContext);
   if (contracts === undefined || providerAndSigner === undefined)
@@ -43,6 +43,13 @@ export function Panel() {
   const [pixelChanges, setPixelChange] = useState<
     [number, number] | undefined
   >();
+
+  const [sellPopupOpen, setSellPopupOpen] = useState<boolean>(false);
+  const [transactionDirection, setTransactionDirection] = useState<Direction>(
+    Direction.DaiToWeth
+  );
+  const [weth, setWeth] = useState<BigNumber>(BigNumber.from(0));
+  const [dai, setDai] = useState<BigNumber>(BigNumber.from(0));
 
   if (balances === undefined) return <></>;
 
@@ -142,55 +149,75 @@ export function Panel() {
     return pixelsWeth.toNumber();
   };
 
-  // Sell Weth / Dai
-  const sellWeth = async () => {
-    if (pixelChanges === undefined) throw new Error();
-    const weth = convertWethChangePixelsToWeth(pixelChanges[0]);
-    const tx = await contracts.market.sellX(weth, {
-      gasLimit: GAS_ESTIMATE_FOR_SELL,
-    });
-    await tx.wait();
+  const sellWeth = () => {
+    if (pixelChanges === undefined) return;
+    setWeth(convertWethChangePixelsToWeth(pixelChanges[0]));
+    setDai(convertDaiPixelsToDai(pixelChanges[1]));
+    setTransactionDirection(Direction.WethToDai);
+    setSellPopupOpen(true);
   };
 
-  const sellDai = async () => {
-    if (pixelChanges === undefined) throw new Error();
-    const dai = convertDaiPixelsToDai(pixelChanges[1]);
-    const tx = await contracts.market.sellY(dai, {
-      gasLimit: GAS_ESTIMATE_FOR_SELL,
-    });
-    await tx.wait();
+  const sellDai = () => {
+    if (pixelChanges === undefined) return;
+    setWeth(convertWethChangePixelsToWeth(pixelChanges[0]));
+    setDai(convertDaiPixelsToDai(pixelChanges[1]));
+    setTransactionDirection(Direction.DaiToWeth);
+    setSellPopupOpen(true);
   };
 
   return (
     <div className="panel">
-      <AmountDisplay
-        height={heightWeth}
-        change={pixelChanges === undefined ? undefined : pixelChanges[0]}
-        onMouseOut={() => {
-          setPixelChange(undefined);
-        }}
-        onMouseMove={(wethPixelChange) => {
-          const daiPixelChange = convertPixelsWethToPixelsDai(wethPixelChange);
-          setPixelChange([-wethPixelChange, -daiPixelChange]);
-        }}
-        onClick={() => {
-          sellWeth();
-        }}
-      />
-      <AmountDisplay
-        height={heightDai}
-        change={pixelChanges === undefined ? undefined : pixelChanges[1]}
-        onMouseOut={() => {
-          setPixelChange(undefined);
-        }}
-        onMouseMove={(daiPixelChange) => {
-          const wethPixelChange = convertPixelsDaiToPixelsWeth(daiPixelChange);
-          setPixelChange([wethPixelChange, daiPixelChange]);
-        }}
-        inverted={true}
-        onClick={() => {
-          sellDai();
-        }}
+      <div className="amount-column">
+        <AmountDisplay
+          height={heightWeth}
+          change={pixelChanges === undefined ? undefined : pixelChanges[0]}
+          onMouseOut={() => {
+            setPixelChange(undefined);
+          }}
+          onMouseMove={(wethPixelChange) => {
+            const daiPixelChange =
+              convertPixelsWethToPixelsDai(wethPixelChange);
+            setPixelChange([-wethPixelChange, -daiPixelChange]);
+          }}
+          onClick={() => {
+            sellWeth();
+          }}
+        />
+        <p className="amountText">
+          {formatUnits(balances.balanceWeth, { showDecimals: 6 })} WETH (
+          {formatUnits(daiValueOfWeth(balances.balanceWeth), {
+            showDecimals: 2,
+          })}{" "}
+          DAI)
+        </p>
+      </div>
+      <div className="amount-column">
+        <AmountDisplay
+          height={heightDai}
+          change={pixelChanges === undefined ? undefined : pixelChanges[1]}
+          onMouseOut={() => {
+            setPixelChange(undefined);
+          }}
+          onMouseMove={(daiPixelChange) => {
+            const wethPixelChange =
+              convertPixelsDaiToPixelsWeth(daiPixelChange);
+            setPixelChange([wethPixelChange, daiPixelChange]);
+          }}
+          inverted={true}
+          onClick={() => {
+            sellDai();
+          }}
+        />
+        <p className="amountText">
+          {formatUnits(balances.balanceDai, { showDecimals: 2 })} DAI
+        </p>
+      </div>
+      <SellPopup
+        weth={weth}
+        dai={dai}
+        open={sellPopupOpen}
+        closed={() => setSellPopupOpen(false)}
+        direction={transactionDirection}
       />
     </div>
   );
