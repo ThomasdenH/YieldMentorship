@@ -91,9 +91,13 @@ contract Market is ERC20("MarketToken", "MART", 18) {
 
         z = x * y;
 
+        // Tests that both x and y are unequal to zero and that the contract
+        // will be initialized.
+        require (z > 0);
+
         _mint(msg.sender, z);
 
-        emit Initialized(msg.sender, x, y);
+        emit Initialized(msg.sender, x, y, z);
 
         tokenX.safeTransferFrom(msg.sender, address(this), x);
         tokenY.safeTransferFrom(msg.sender, address(this), y);
