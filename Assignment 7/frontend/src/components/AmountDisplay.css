@@ -1,0 +1,18 @@
+.visual-amount {
+    width: 100px;
+    border: 1px solid black;
+    position: relative;
+    transition: height 0.15s ease-out;
+}
+
+.add-amount {
+    width: 100px;
+    border: 1px dotted black;
+    position: absolute;
+    pointer-events: none;
+}
+
+.sub-amount {
+    border-bottom: 1px dotted black;
+    pointer-events: none;
+}

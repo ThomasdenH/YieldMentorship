@@ -1,0 +1,13 @@
+.button {
+    border-radius: 4px;
+    display: inline-block;
+    background-color: white;
+    margin-bottom: 4px;
+    border: 1px solid #eee;
+    padding: 4px;
+}
+
+.button:enabled {
+    cursor: pointer;
+    border: 1px solid black;
+}
