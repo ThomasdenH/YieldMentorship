@@ -9,7 +9,7 @@ import "src/Market.sol";
 abstract contract ZeroState is Test {
     ////////////////////////////
     // Events from Market.sol //
-    event Initialized(address indexed to, uint256 xAmount, uint256 yAmount);
+    event Initialized(address indexed to, uint256 xAmount, uint256 yAmount, uint256 zAmount);
     event Minted(
         address indexed to,
         uint256 xAmount,
@@ -95,13 +95,15 @@ contract ContractTest is ZeroState {
     function testInitialize(uint256 inputX, uint256 inputY) public {
         vm.assume(inputX < tokenBalanceX);
         vm.assume(inputY < tokenBalanceY);
+        vm.assume(inputX > 0);
+        vm.assume(inputY > 0);
 
         vm.startPrank(user1);
         tokenX.approve(address(market), inputX);
         tokenY.approve(address(market), inputY);
 
         vm.expectEmit(true, true, true, true);
-        emit Initialized(user1, inputX, inputY);
+        emit Initialized(user1, inputX, inputY, inputX * inputY);
 
         // Initialize by adding liquidity with the two tokens.
         market.initialize(inputX, inputY);

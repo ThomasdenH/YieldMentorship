@@ -28,47 +28,44 @@ contract Market is ERC20("MarketToken", "MART", 18) {
 
     /// @notice Emitted when the market gets initialized. This can happen
     ///     multiple times if the contracts liquidity gets emptied entirely!
-    event Initialized(address indexed to, uint256 xAmount, uint256 yAmount);
+    event Initialized(
+        address indexed to,
+        uint256 xIn,
+        uint256 yIn,
+        uint256 sharesOut
+    );
     /// @notice Emitted when the market receives liquidity while it is already
     ///     initialized.
     event Minted(
         address indexed to,
-        uint256 xAmount,
-        uint256 yAmount,
-        uint256 shares
+        uint256 xIn,
+        uint256 yIn,
+        uint256 sharesOut
     );
     event Burned(
         address indexed to,
-        uint256 xAmount,
-        uint256 yAmount,
-        uint256 shares
+        uint256 xOut,
+        uint256 yOut,
+        uint256 sharesIn
     );
-    event SoldX(
-        address indexed account,
-        uint256 xAmount,
-        uint256 yAmount
-    );
-    event SoldY(
-        address indexed account,
-        uint256 xAmount,
-        uint256 yAmount
-    );
+    event SoldX(address indexed account, uint256 zIn, uint256 yOut);
+    event SoldY(address indexed account, uint256 xOut, uint256 yIn);
 
     /// @notice The first token that can be exchanged with the other,
-    ///     `token_y`.
-    IERC20 immutable tokenX;
+    ///     `yToken`.
+    IERC20 immutable xToken;
 
     /// @notice The second token that can be exchanged with the other,
-    ///     `token_x`.
-    IERC20 immutable tokenY;
+    ///     `xToken`.
+    IERC20 immutable yToken;
 
     /// @notice Initialize this contract to create an exchange between the two
     ///     supplied tokens.
-    /// @param _tokenX The first token.
-    /// @param _tokenY The second token.
-    constructor(IERC20 _tokenX, IERC20 _tokenY) {
-        tokenX = _tokenX;
-        tokenY = _tokenY;
+    /// @param _xToken The first token.
+    /// @param _yToken The second token.
+    constructor(IERC20 _xToken, IERC20 _yToken) {
+        xToken = _xToken;
+        yToken = _yToken;
     }
 
     /// @notice Initialize this contract by supplying initial liquidity. This
@@ -80,95 +77,117 @@ contract Market is ERC20("MarketToken", "MART", 18) {
     ///
     ///     This function can be called anytime there is no liquidity in the
     ///     contract. (In the form of liquidity tokens, which is not the same
-    ///     as this contract having empty balances of `tokenX` and `tokenY` due
+    ///     as this contract having empty balances of `xToken` and `yToken` due
     ///     to rounding.)
-    /// @param x The amount of tokens of `tokenX`.
-    /// @param y The amount of tokens of `tokenY`.
+    /// @param xIn The amount of tokens of `xToken`.
+    /// @param yIn The amount of tokens of `yToken`.
+    /// @return sharesOut The number of liquidity tokens that will be minted to the
+    ///     caller.
     /// @dev Here, liquidity tokens are given out as
-    ///     z = x * y
-    function initialize(uint256 x, uint256 y) external returns (uint256 z) {
+    ///     `sharesOut = xIn * yIn`
+    function initialize(uint256 xIn, uint256 yIn)
+        external
+        returns (uint256 sharesOut)
+    {
         require(_totalSupply == 0);
 
-        z = x * y;
+        sharesOut = xIn * yIn;
 
-        _mint(msg.sender, z);
+        // Tests that both x and y are unequal to zero and that the contract
+        // will be initialized.
+        require(sharesOut > 0);
 
-        emit Initialized(msg.sender, x, y);
+        _mint(msg.sender, sharesOut);
 
-        tokenX.safeTransferFrom(msg.sender, address(this), x);
-        tokenY.safeTransferFrom(msg.sender, address(this), y);
+        emit Initialized(msg.sender, xIn, yIn, sharesOut);
+
+        xToken.safeTransferFrom(msg.sender, address(this), xIn);
+        yToken.safeTransferFrom(msg.sender, address(this), yIn);
     }
 
     /// @notice Mint liquidity tokens in proportion to the current price in the
     ///     contract. If the amounts of tokenX and tokenY are not supplied in
     ///     the exact proportions, the more valuable side will be capped to
     ///     have equal value.
-    /// @param x The amount of tokenX to supply.
-    /// @param y The amount of tokenY to supply.
-    /// @return z The amount of liquidity tokens returned.
-    /// @dev Here, we have the invariant that `x0 / y0 = x / y`, interpreted as
-    ///     the current price. If the user supplied too much of `x` or `y`, we
-    ///     want to lower the other value and give out less liquidity tokens
-    ///     accordingly.
+    /// @param xIn The amount of tokenX to supply.
+    /// @param yIn The amount of tokenY to supply.
+    /// @return sharesOut The amount of liquidity tokens returned.
+    /// @dev Here, we have the invariant that
+    ///         `xInitialBalance / yInitialBalance = xIn / yIn`
+    ///     interpreted as the current price. If the user supplied too much of
+    ///     `x` or `y`, we want to lower the other value and give out less
+    ///     liquidity tokens accordingly.
     ///
     ///     We should have
-    ///         x0 * y = y0 * x
-    ///     so, if the left side (aY) is bigger, decrease y and if the right
-    ///     side (aX) is bigger, decrease x. Take the other value as the true
+    ///         `xInitialBalance * yIn = yInitialBalance * xIn`
+    ///     so, if the left side (aY) is bigger, decrease yIn and if the right
+    ///     side (aX) is bigger, decrease xIn. Take the other value as the true
     ///     value to derive from.
     ///
-    ///     By how much? Well, divide the other side by x0 or y0. Do either
-    ///         y <- (y0 * x) / x0
-    ///         x <- (x0 * y) / y0
-    ///     to correct the bigger value between x and y. Due to rounding the new
-    ///     value may be slightly smaller and never bigger than the real value.
+    ///     By how much? Well, divide the other side by `xInitialBalance` or
+    ///     `yInitialBalance`. Do either
+    ///         yIn <- (yInitialBalance * xIn) / xInitialBalance
+    ///         xIn <- (xInitialBalance * yIn) / yInitialBalance
+    ///     to correct the bigger value between `xIn` and `yIn`. Due to
+    ///     rounding the new value may be slightly smaller and never bigger
+    ///     than the real value.
     ///
     ///     Now we need to give out liquidity tokens in proportion to the new
     ///     liquidity. We need
-    ///         z / z0 = x / x0 = y / y0
-    ///     Compute z from the smaller of `x` and `y`, which we know was the
-    ///     one just recomputed.
-    ///         z <- z0 * x / x0
-    ///         z <- z0 * y / y0
+    ///         `sharesOut / sharesInitialBalance = xIn / xInitialBalance
+    ///             = yIn / yInitialBalance`
+    ///     Compute `sharesOut` from the smaller of `xIn` and `yIn`, which we
+    ///     know was the one just recomputed.
+    ///         sharesOut <- sharesBalance * xIn / xInitialBalance
+    ///         sharesOut <- sharesBalance * yIn / yInitialBalance
     ///     Like before, we know that by rounding down we can never give too
     ///     many liquidity tokens.
-    function mint(uint256 x, uint256 y) external returns (uint256 z) {
-        uint256 x0 = tokenX.balanceOf(address(this));
-        uint256 y0 = tokenY.balanceOf(address(this));
+    function mint(uint256 xIn, uint256 yIn)
+        external
+        returns (uint256 sharesOut)
+    {
+        uint256 xInitialBalance = xToken.balanceOf(address(this));
+        uint256 yInitialBalance = yToken.balanceOf(address(this));
 
         // Require that both balances are non-zero. For a little more gas,
         // `totalSupply > 0` would be a roughly equivalent check. The advantage
         // is that it could be performed at the top of the function.
-        if (x0 | y0 == 0) {
+        if (xInitialBalance | yInitialBalance == 0) {
             revert Uninitialized();
         }
 
-        uint256 aX = x * y0;
-        uint256 aY = y * x0;
+        uint256 aX = xIn * yInitialBalance;
+        uint256 aY = yIn * xInitialBalance;
 
         if (aX > aY) {
-            x = aY / y0;
-            z = _totalSupply * x / x0;
+            xIn = aY / yInitialBalance;
+            // False positive: We want to compute the shares from the newly
+            // computed x and rather be too low than too high.
+            //slither-disable-next-line divide-before-multiply
+            sharesOut = (_totalSupply * xIn) / xInitialBalance;
         } else {
-            y = aX / x0;
-            z = _totalSupply * y / y0;
+            yIn = aX / xInitialBalance;
+            // False positive: We want to compute the shares from the newly
+            // computed x and rather be too low than too high.
+            //slither-disable-next-line divide-before-multiply
+            sharesOut = (_totalSupply * yIn) / yInitialBalance;
         }
 
-        _mint(msg.sender, z);
+        _mint(msg.sender, sharesOut);
 
-        emit Minted(msg.sender, x, y, z);
+        emit Minted(msg.sender, xIn, yIn, sharesOut);
 
-        tokenX.safeTransferFrom(msg.sender, address(this), x);
-        tokenY.safeTransferFrom(msg.sender, address(this), y);
+        xToken.safeTransferFrom(msg.sender, address(this), xIn);
+        yToken.safeTransferFrom(msg.sender, address(this), yIn);
     }
 
     /// @notice Burn liquidity tokens in exchange for tokenX and tokenY in
     ///     proportion to the current supply in the contract.
     ///
     ///     Fails if the contract is unitialized.
-    /// @param z The amount of liquidity tokens to burn.
-    /// @return x The amount of tokenX that was sent to the account.
-    /// @return y The amount of tokenY that was send to the account.
+    /// @param sharesIn The amount of liquidity tokens to burn.
+    /// @return xOut The amount of tokenX that was sent to the account.
+    /// @return yOut The amount of tokenY that was send to the account.
     /// @dev We have the invariant that
     ///         x / x0 = y / y0 = z / z0
     ///     if we ignore rounding.
@@ -178,7 +197,10 @@ contract Market is ERC20("MarketToken", "MART", 18) {
     ///         y <- y0 * z / z0
     ///     Rounding means we can never give out too much of the underlying
     ///     supply.
-    function burn(uint256 z) external returns (uint256 x, uint256 y) {
+    function burn(uint256 sharesIn)
+        external
+        returns (uint256 xOut, uint256 yOut)
+    {
         uint256 tSup = _totalSupply;
         // We don't strictly have to check this: division by zero in the
         // following lines will revert anyway. However, for UX revert with the
@@ -186,22 +208,23 @@ contract Market is ERC20("MarketToken", "MART", 18) {
         if (tSup == 0) {
             revert Uninitialized();
         }
-        x = (tokenX.balanceOf(address(this)) * z) / tSup;
-        y = (tokenY.balanceOf(address(this)) * z) / tSup;
+        xOut = (xToken.balanceOf(address(this)) * sharesIn) / tSup;
+        yOut = (yToken.balanceOf(address(this)) * sharesIn) / tSup;
 
-        _burn(msg.sender, z);
-        emit Burned(msg.sender, x, y, z);
+        _burn(msg.sender, sharesIn);
 
-        tokenX.safeTransfer(msg.sender, x);
-        tokenY.safeTransfer(msg.sender, y);
+        emit Burned(msg.sender, xOut, yOut, sharesIn);
+
+        xToken.safeTransfer(msg.sender, xOut);
+        yToken.safeTransfer(msg.sender, yOut);
     }
 
     /// @notice Sell tokenX in exchange for tokenY. The price in the contract
     ///     will be determined such that the new product of balance of tokenX
     ///     and tokenY is equal to the old product. Requires sufficient
     ///     approval for this contract to send itself tokenX.
-    /// @param x The amount of tokenX to sell.
-    /// @return y The amount of tokenY that has been transferred.
+    /// @param xIn The amount of tokenX to sell.
+    /// @return yOut The amount of tokenY that has been transferred.
     /// @dev We have the invariant that
     ///         x0 * y0 <= x1 * y1
     ///     with the inequality only occuring due to rounding.
@@ -227,35 +250,35 @@ contract Market is ERC20("MarketToken", "MART", 18) {
     ///     then the value of tokenY is infinite and so the user gets no
     ///     tokens, as they should. So, even an unitialized contract gives out
     ///     tokens at the "correct", albeit extreme price.
-    function sellX(uint256 x) external returns (uint256 y) {
-        uint256 x0 = tokenX.balanceOf(address(this));
-        uint256 y0 = tokenY.balanceOf(address(this));
+    function sellX(uint256 xIn) external returns (uint256 yOut) {
+        uint256 xInitialBalance = xToken.balanceOf(address(this));
+        uint256 yInitialBalance = yToken.balanceOf(address(this));
 
-        y = (y0 * x) / (x0 + x);
+        yOut = (yInitialBalance * xIn) / (xInitialBalance + xIn);
 
-        emit SoldX(msg.sender, x, y);
+        emit SoldX(msg.sender, xIn, yOut);
 
-        tokenX.safeTransferFrom(msg.sender, address(this), x);
-        tokenY.safeTransfer(msg.sender, y);
+        xToken.safeTransferFrom(msg.sender, address(this), xIn);
+        yToken.safeTransfer(msg.sender, yOut);
     }
 
     /// @notice Sell tokenY in exchange for tokenX. The price in the contract
     ///     will be determined such that the new product of balance of tokenX
     ///     and tokenY is equal to the old product. Requires sufficient
     ///     approval for this contract to send itself tokenY.
-    /// @param y The amount of tokenY to sell.
-    /// @return x The amount of tokenX that has been transferred.
+    /// @param yIn The amount of tokenY to sell.
+    /// @return xOut The amount of tokenX that has been transferred.
     /// @dev See `sellX` for a derivation of the used equation. That function
     ///     is entirely symmetric over x <-> y.
-    function sellY(uint256 y) external returns (uint256 x) {        
-        uint256 y0 = tokenY.balanceOf(address(this));
-        uint256 x0 = tokenX.balanceOf(address(this));
+    function sellY(uint256 yIn) external returns (uint256 xOut) {
+        uint256 yInitialBalance = yToken.balanceOf(address(this));
+        uint256 xInitialBalance = xToken.balanceOf(address(this));
 
-        x = x0 * y / (y0 + y);
+        xOut = (xInitialBalance * yIn) / (yInitialBalance + yIn);
 
-        emit SoldY(msg.sender, x, y);
+        emit SoldY(msg.sender, xOut, yIn);
 
-        tokenY.safeTransferFrom(msg.sender, address(this), y);
-        tokenX.safeTransfer(msg.sender, x);
+        yToken.safeTransferFrom(msg.sender, address(this), yIn);
+        xToken.safeTransfer(msg.sender, xOut);
     }
 }
