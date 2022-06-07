@@ -9,6 +9,10 @@ interface Props {
   inverted?: boolean;
 }
 
+/**
+ * A visual display of an amount. The height of the bar indicates the value in DAI, not the natural
+ * units of the bar.
+ */
 export const AmountDisplay = ({
   height,
   onMouseMove,

@@ -20,7 +20,7 @@ const App = () => {
   if (window.ethereum === undefined)
     return (
       <div className="App">
-        <p>No Web3 provider found...</p>
+        <p role='textbox'>No Web3 provider found...</p>
       </div>
     );
 

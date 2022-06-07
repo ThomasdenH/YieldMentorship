@@ -19,6 +19,9 @@ export const ContractsContext = createContext<IContractsContext | undefined>(
   undefined
 );
 
+/**
+ * Initialize and supply contracts to the child components.
+ */
 export const Contracts = () => {
   // Load provider and signer
   const providerAndSigner = useContext(ProviderAndSigner);

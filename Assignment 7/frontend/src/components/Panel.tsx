@@ -14,6 +14,10 @@ interface IBalances {
   marketBalanceDai: BigNumber;
 }
 
+/**
+ * The main panel and point of interaction with the app. Click on the column to sell an amount for
+ * the other.
+ */
 export const Panel = () => {
   const providerAndSigner = useContext(ProviderAndSigner);
   const contracts = useContext(ContractsContext);
@@ -37,19 +41,29 @@ export const Panel = () => {
     });
   })();
 
-  // The current change in weth in pixels. I.e.: The ratio between this number
-  //    and the height is the same as that between the change in Weth and the
-  //    total balance.
+  /**
+   * The current change in weth in pixels. I.e.: The ratio between this number and the height is
+   * the same as that between the change in Weth and the total balance.
+   */
   const [pixelChanges, setPixelChange] = useState<
     [number, number] | undefined
   >();
 
+  /**
+   * If true, the popup for selling will be shown.
+   */
   const [sellPopupOpen, setSellPopupOpen] = useState<boolean>(false);
   const [transactionDirection, setTransactionDirection] = useState<Direction>(
     Direction.DaiToWeth
   );
-  const [weth, setWeth] = useState<BigNumber>(BigNumber.from(0));
-  const [dai, setDai] = useState<BigNumber>(BigNumber.from(0));
+
+  /**
+   * `weth` and `dai` are the amounts to be included in a transaction.
+   */
+  const [transactWeth, setTransactWeth] = useState<BigNumber>(
+    BigNumber.from(0)
+  );
+  const [transactDai, setTransactDai] = useState<BigNumber>(BigNumber.from(0));
 
   if (balances === undefined) return <></>;
 
@@ -100,7 +114,7 @@ export const Panel = () => {
   const previewSellDai = (dai: BigNumber) =>
     balances.marketBalanceWeth.mul(dai).div(balances.marketBalanceDai.add(dai));
 
-  // Compute the heights of the full balances.
+  /** Compute the heights of the full balances. */
   const [heightWeth, heightDai] = computeHeights();
 
   /**
@@ -149,18 +163,24 @@ export const Panel = () => {
     return pixelsWeth.toNumber();
   };
 
+  /**
+   * Sell Weth by opening the popup.
+   */
   const sellWeth = () => {
     if (pixelChanges === undefined) return;
-    setWeth(convertWethChangePixelsToWeth(pixelChanges[0]));
-    setDai(convertDaiPixelsToDai(pixelChanges[1]));
+    setTransactWeth(convertWethChangePixelsToWeth(pixelChanges[0]));
+    setTransactDai(convertDaiPixelsToDai(pixelChanges[1]));
     setTransactionDirection(Direction.WethToDai);
     setSellPopupOpen(true);
   };
 
+  /**
+   * Sell Dai by opening the popup.
+   */
   const sellDai = () => {
     if (pixelChanges === undefined) return;
-    setWeth(convertWethChangePixelsToWeth(pixelChanges[0]));
-    setDai(convertDaiPixelsToDai(pixelChanges[1]));
+    setTransactWeth(convertWethChangePixelsToWeth(pixelChanges[0]));
+    setTransactDai(convertDaiPixelsToDai(pixelChanges[1]));
     setTransactionDirection(Direction.DaiToWeth);
     setSellPopupOpen(true);
   };
@@ -213,12 +233,12 @@ export const Panel = () => {
         </p>
       </div>
       <SellPopup
-        weth={weth}
-        dai={dai}
+        weth={transactWeth}
+        dai={transactDai}
         open={sellPopupOpen}
         closed={() => setSellPopupOpen(false)}
         direction={transactionDirection}
       />
     </div>
   );
-}
+};
