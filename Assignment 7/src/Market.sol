@@ -161,9 +161,15 @@ contract Market is ERC20("MarketToken", "MART", 18) {
 
         if (aX > aY) {
             xIn = aY / yInitialBalance;
+            // False positive: We want to compute the shares from the newly
+            // computed x and rather be too low than too high.
+            //slither-disable-next-line divide-before-multiply
             sharesOut = (_totalSupply * xIn) / xInitialBalance;
         } else {
             yIn = aX / xInitialBalance;
+            // False positive: We want to compute the shares from the newly
+            // computed x and rather be too low than too high.
+            //slither-disable-next-line divide-before-multiply
             sharesOut = (_totalSupply * yIn) / yInitialBalance;
         }
 
