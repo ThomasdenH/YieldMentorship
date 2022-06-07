@@ -28,7 +28,12 @@ contract Market is ERC20("MarketToken", "MART", 18) {
 
     /// @notice Emitted when the market gets initialized. This can happen
     ///     multiple times if the contracts liquidity gets emptied entirely!
-    event Initialized(address indexed to, uint256 xAmount, uint256 yAmount);
+    event Initialized(
+        address indexed to,
+        uint256 xAmount,
+        uint256 yAmount,
+        uint256 zAmount
+    );
     /// @notice Emitted when the market receives liquidity while it is already
     ///     initialized.
     event Minted(
@@ -43,16 +48,8 @@ contract Market is ERC20("MarketToken", "MART", 18) {
         uint256 yAmount,
         uint256 shares
     );
-    event SoldX(
-        address indexed account,
-        uint256 xAmount,
-        uint256 yAmount
-    );
-    event SoldY(
-        address indexed account,
-        uint256 xAmount,
-        uint256 yAmount
-    );
+    event SoldX(address indexed account, uint256 xAmount, uint256 yAmount);
+    event SoldY(address indexed account, uint256 xAmount, uint256 yAmount);
 
     /// @notice The first token that can be exchanged with the other,
     ///     `token_y`.
@@ -93,7 +90,7 @@ contract Market is ERC20("MarketToken", "MART", 18) {
 
         // Tests that both x and y are unequal to zero and that the contract
         // will be initialized.
-        require (z > 0);
+        require(z > 0);
 
         _mint(msg.sender, z);
 
@@ -152,10 +149,10 @@ contract Market is ERC20("MarketToken", "MART", 18) {
 
         if (aX > aY) {
             x = aY / y0;
-            z = _totalSupply * x / x0;
+            z = (_totalSupply * x) / x0;
         } else {
             y = aX / x0;
-            z = _totalSupply * y / y0;
+            z = (_totalSupply * y) / y0;
         }
 
         _mint(msg.sender, z);
@@ -252,11 +249,11 @@ contract Market is ERC20("MarketToken", "MART", 18) {
     /// @return x The amount of tokenX that has been transferred.
     /// @dev See `sellX` for a derivation of the used equation. That function
     ///     is entirely symmetric over x <-> y.
-    function sellY(uint256 y) external returns (uint256 x) {        
+    function sellY(uint256 y) external returns (uint256 x) {
         uint256 y0 = tokenY.balanceOf(address(this));
         uint256 x0 = tokenX.balanceOf(address(this));
 
-        x = x0 * y / (y0 + y);
+        x = (x0 * y) / (y0 + y);
 
         emit SoldY(msg.sender, x, y);
 
